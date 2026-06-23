@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { CITIES, validatePostcode, getCityByPostcode, sortCities } from '../data/cities';
-import { submitMarketReport } from '../api/client';
+
+const BACKEND_URL = 'https://issue-addressing-soviet-crops.trycloudflare.com';
 
 const MAX_POSTCODES = 3;
 const SORTED_CITIES = sortCities(CITIES);
@@ -88,12 +89,17 @@ export default function MarketReports() {
     setFeedback(null);
 
     try {
-      const resp = await submitMarketReport({
-        city: selectedCity,
-        postcodes: selectedPostcodes,
-        email: email.trim(),
+      const params = new URLSearchParams();
+      params.append('city', selectedCity);
+      params.append('postcodes', selectedPostcodes.join(','));
+      params.append('email', email.trim());
+      const resp = await fetch(`${BACKEND_URL}/submit-market-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
       });
-      if (resp.success) {
+      const data = await resp.json();
+      if (data.success) {
         setFeedback({ type: 'success', message: `Request received! We'll process ${selectedPostcodes.join(', ')} for ${city?.name} and email your reports to ${email.trim()}.` });
         setEntries([{ id: 1, value: '', touched: false }]);
         setEmail('');
@@ -101,7 +107,7 @@ export default function MarketReports() {
         setSelectedCity('');
         nextId.current = 2;
       } else {
-        setFeedback({ type: 'error', message: resp.errors?.join(' ') || 'Submission failed. Please try again.' });
+        setFeedback({ type: 'error', message: data.errors?.join(' ') || 'Submission failed. Please try again.' });
       }
     } catch {
       setFeedback({ type: 'error', message: 'Connection error. Please ensure the server is running.' });

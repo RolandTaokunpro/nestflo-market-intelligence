@@ -367,7 +367,7 @@ export default function MarketReports() {
       {/* Sample report link */}
       <div className="mt-8 text-center">
         <a
-          href="https://drive.google.com/drive/u/0/folders/1gGq9h3XchebpS6Q6EzZxy04Myysnmyeq"
+          href="/sample-market-report.pdf"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-sm font-medium text-brand-lavender hover:text-brand-cyan transition border border-white/10 rounded-lg px-4 py-2.5"

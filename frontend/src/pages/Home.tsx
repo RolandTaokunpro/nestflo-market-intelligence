@@ -77,7 +77,7 @@ export default function Home() {
               </p>
               <div className="flex flex-wrap gap-4 justify-center lg:justify-start mt-2">
                 <a
-                  href="https://drive.google.com/drive/u/0/folders/1gGq9h3XchebpS6Q6EzZxy04Myysnmyeq"
+                  href="/sample-market-report.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-brand-grey hover:text-brand-cyan transition-colors underline underline-offset-2"
@@ -85,7 +85,7 @@ export default function Home() {
                   &#x1F4C4; View a sample Market Report
                 </a>
                 <a
-                  href="https://drive.google.com/drive/u/0/folders/1TBrJfLw5szQDHrmJ7z6ZQHPwurpNiwJd"
+                  href="/sample-target-vs-comparable.pdf"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-brand-grey hover:text-brand-cyan transition-colors underline underline-offset-2"
@@ -388,7 +388,7 @@ export default function Home() {
               Get Report
             </Link>
             <a
-              href="https://drive.google.com/drive/u/0/folders/1gGq9h3XchebpS6Q6EzZxy04Myysnmyeq"
+              href="/sample-market-report.pdf"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-brand-grey hover:text-brand-cyan transition-colors text-center mt-3 underline underline-offset-2"
@@ -418,7 +418,7 @@ export default function Home() {
               Get Report
             </Link>
             <a
-              href="https://drive.google.com/drive/u/0/folders/1TBrJfLw5szQDHrmJ7z6ZQHPwurpNiwJd"
+              href="/sample-target-vs-comparable.pdf"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-brand-grey hover:text-brand-cyan transition-colors text-center mt-3 underline underline-offset-2"

@@ -269,7 +269,7 @@ export default function TargetVsComparable() {
 
       <div className="mt-8 text-center">
         <a
-          href="https://drive.google.com/drive/u/0/folders/1TBrJfLw5szQDHrmJ7z6ZQHPwurpNiwJd"
+          href="/sample-target-vs-comparable.pdf"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-sm font-medium text-white hover:text-brand-cyan transition border border-navy/10 rounded-lg px-4 py-2.5"

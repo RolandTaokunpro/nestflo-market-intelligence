@@ -19,9 +19,17 @@ export default function MarketReports() {
   ]);
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [companyNameTouched, setCompanyNameTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const nextId = useRef(2);
+
+  const FREE_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com', 'gmx.com', 'ymail.com'];
+  const isBusinessEmail = (email: string) => {
+    const domain = email.split('@')[1]?.toLowerCase();
+    return domain && !FREE_EMAIL_DOMAINS.includes(domain);
+  };
 
   const city = useMemo(() => SORTED_CITIES.find(c => c.prefix === selectedCity), [selectedCity]);
 
@@ -49,11 +57,14 @@ export default function MarketReports() {
         return;
       }
     });
+    if (emailTouched && email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !isBusinessEmail(email)) {
+      errs.email = 'Please use a business email address (not @gmail.com, @yahoo.com, etc.).';
+    }
     return errs;
-  }, [selectedCity, entries, city]);
+  }, [selectedCity, entries, city, email, emailTouched]);
 
   const hasAtLeastOneValid = selectedPostcodes.length >= 1 && Object.keys(errors).length === 0;
-  const isValid = selectedCity && hasAtLeastOneValid && email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const isValid = selectedCity && hasAtLeastOneValid && email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && isBusinessEmail(email) && companyName.trim().length > 0;
   const canAddMore = entries.length < MAX_POSTCODES;
 
   const handleCityChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -93,6 +104,7 @@ export default function MarketReports() {
       params.append('city', selectedCity);
       params.append('postcodes', selectedPostcodes.join(','));
       params.append('email', email.trim());
+      params.append('company_name', companyName.trim());
       const resp = await fetch(`${BACKEND_URL}/submit-market-report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -104,6 +116,8 @@ export default function MarketReports() {
         setEntries([{ id: 1, value: '', touched: false }]);
         setEmail('');
         setEmailTouched(false);
+        setCompanyName('');
+        setCompanyNameTouched(false);
         setSelectedCity('');
         nextId.current = 2;
       } else {
@@ -117,12 +131,42 @@ export default function MarketReports() {
 
   return (
     <div className="max-w-xl mx-auto px-4 py-12 sm:py-16">
-      <h1 className="text-2xl sm:text-3xl font-bold text-navy mb-2 tracking-tight">
+      <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">
         HMO Market Reports
       </h1>
-      <p className="text-sm text-gray-500 mb-8">
+      <p className="text-base sm:text-lg text-brand-lavender font-medium mb-2">
+        The market data you&rsquo;ll wish you had when a tenant disputes your rent.
+      </p>
+      <p className="text-sm text-brand-grey mb-8">
         Select a city and up to 3 postcodes to generate tribunal-ready HMO market evidence packs.
       </p>
+
+      {/* Why get this report */}
+      <div className="bg-navy-light rounded-xl border border-white/8 p-5 sm:p-6 mb-8">
+        <h2 className="text-sm font-semibold text-orange uppercase tracking-wider mb-3">
+          Why you need this
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="flex items-start gap-3">
+            <span className="text-orange text-lg flex-shrink-0 mt-0.5">&#x1F6E1;</span>
+            <div>
+              <p className="text-sm font-semibold text-white mb-1">SpareRoom won&rsquo;t save this data</p>
+              <p className="text-xs text-brand-grey leading-relaxed">
+                SpareRoom deletes old listings. This report is your timestamped proof.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-orange text-lg flex-shrink-0 mt-0.5">&#x2696;&#xFE0F;</span>
+            <div>
+              <p className="text-sm font-semibold text-white mb-1">Built to tribunal standard</p>
+              <p className="text-xs text-brand-grey leading-relaxed">
+                P25/P50/P75 percentiles with verified screenshots. Evidence a tribunal will accept.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {feedback && (
         <div
@@ -137,18 +181,18 @@ export default function MarketReports() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="bg-white rounded-xl shadow-sm border border-navy/6 p-6 sm:p-8 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="bg-navy-light rounded-xl border border-white/8 p-6 sm:p-8 space-y-6">
         {/* City */}
         <div>
-          <label htmlFor="city" className="block text-sm font-semibold text-navy mb-1.5">
+          <label htmlFor="city" className="block text-sm font-semibold text-white mb-1.5">
             City
           </label>
           <select
             id="city"
             value={selectedCity}
             onChange={handleCityChange}
-            className={`w-full p-3 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
-              errors.city ? 'border-red-400' : 'border-navy/15'
+            className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
+              errors.city ? 'border-red-400' : 'border-white/15'
             }`}
             aria-describedby="city-error"
           >
@@ -182,15 +226,15 @@ export default function MarketReports() {
         {/* Postcodes */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-semibold text-navy">
+            <label className="block text-sm font-semibold text-white">
               Postcodes
             </label>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-brand-grey">
               {selectedPostcodes.length}/{MAX_POSTCODES} selected
             </span>
           </div>
           {!selectedCity && (
-            <p className="text-xs text-gray-400 italic mb-2">Select a city first.</p>
+            <p className="text-xs text-brand-grey italic mb-2">Select a city first.</p>
           )}
           <div className="space-y-2">
             {entries.map((entry, idx) => {
@@ -204,8 +248,8 @@ export default function MarketReports() {
                     placeholder={city ? `e.g. ${city.postcodes[0]}` : 'e.g. BS1'}
                     disabled={!selectedCity}
                     maxLength={7}
-                    className={`flex-1 p-3 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition uppercase ${
-                      entry.touched && errors[errKey] ? 'border-red-400' : 'border-navy/15'
+                    className={`flex-1 p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition uppercase ${
+                      entry.touched && errors[errKey] ? 'border-red-400' : 'border-white/15'
                     } ${!selectedCity ? 'opacity-50 cursor-not-allowed' : ''}`}
                     aria-label={`Postcode ${idx + 1}`}
                     aria-describedby={errors[errKey] ? `pc-err-${entry.id}` : undefined}
@@ -215,7 +259,7 @@ export default function MarketReports() {
                     <button
                       type="button"
                       onClick={() => removePostcode(entry.id)}
-                      className="px-3 text-gray-400 hover:text-red-500 transition"
+                      className="px-3 text-brand-grey hover:text-red-500 transition"
                       aria-label={`Remove postcode ${idx + 1}`}
                     >
                       ✕
@@ -235,7 +279,7 @@ export default function MarketReports() {
             <button
               type="button"
               onClick={addPostcode}
-              className="text-xs text-navy font-medium mt-2 hover:text-orange transition"
+              className="text-xs text-brand-cyan font-medium mt-2 hover:text-orange transition"
             >
               + Add another postcode
             </button>
@@ -250,7 +294,7 @@ export default function MarketReports() {
             ) : null;
           })}
           {selectedCity && entries.length === 1 && entries[0].value.trim() && !errors[`pc-${entries[0].id}`] && (
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-brand-grey mt-1">
               {city?.postcodes.filter(pc =>
                 pc.startsWith(city.prefix)
               ).slice(0, 8).join(', ')}{(city?.postcodes.length ?? 0) > 8 ? '…' : ''}
@@ -258,28 +302,54 @@ export default function MarketReports() {
           )}
         </div>
 
+        {/* Company Name */}
+        <div>
+          <label htmlFor="companyName" className="block text-sm font-semibold text-white mb-1.5">
+            Company Name
+          </label>
+          <input
+            type="text"
+            id="companyName"
+            value={companyName}
+            onChange={e => { setCompanyName(e.target.value); setCompanyNameTouched(true); }}
+            placeholder="Your business or agency name"
+            className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
+              companyNameTouched && !companyName.trim()
+                ? 'border-red-400'
+                : 'border-white/15'
+            }`}
+            aria-describedby="companyName-error"
+          />
+          {companyNameTouched && !companyName.trim() && (
+            <p id="companyName-error" className="text-xs text-red-500 mt-1">Company name is required.</p>
+          )}
+        </div>
+
         {/* Email */}
         <div>
-          <label htmlFor="email" className="block text-sm font-semibold text-navy mb-1.5">
-            Email
+          <label htmlFor="email" className="block text-sm font-semibold text-white mb-1.5">
+            Business Email
           </label>
           <input
             type="email"
             id="email"
             value={email}
             onChange={e => { setEmail(e.target.value); setEmailTouched(true); }}
-            placeholder="you@example.com"
-            className={`w-full p-3 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
-              emailTouched && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+            placeholder="you@yourcompany.co.uk"
+            className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
+              (emailTouched && email.trim() && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (errors.email && !errors.email.includes('valid email')))) || (emailTouched && errors.email)
                 ? 'border-red-400'
-                : 'border-navy/15'
+                : 'border-white/15'
             }`}
             aria-describedby="email-error"
           />
-          {emailTouched && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+          {emailTouched && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !errors.email && (
             <p id="email-error" className="text-xs text-red-500 mt-1">Please enter a valid email address.</p>
           )}
-          <p className="text-xs text-gray-400 mt-1">Your reports will be sent to this address.</p>
+          {emailTouched && errors.email && (
+            <p id="email-error" className="text-xs text-red-500 mt-1">{errors.email}</p>
+          )}
+          <p className="text-xs text-brand-grey mt-1">Business email required — no Gmail, Yahoo, or other free providers.</p>
         </div>
 
         {/* Submit */}
@@ -289,7 +359,7 @@ export default function MarketReports() {
           className={`w-full py-3 rounded-lg text-sm font-semibold transition ${
             isValid && !submitting
               ? 'bg-orange text-white hover:bg-orange-dark cursor-pointer'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-white/10 text-brand-grey cursor-not-allowed'
           }`}
         >
           {submitting ? 'Submitting…' : 'Generate Report'}
@@ -299,10 +369,10 @@ export default function MarketReports() {
       {/* Sample report link */}
       <div className="mt-8 text-center">
         <a
-          href="https://drive.google.com/drive/u/0/folders/13jk7EpP0-CSl2Y2IgT94CyVusHP2QrKy"
+          href="https://drive.google.com/drive/u/0/folders/1gGq9h3XchebpS6Q6EzZxy04Myysnmyeq"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-sm font-medium text-navy hover:text-orange transition border border-navy/10 rounded-lg px-4 py-2.5"
+          className="inline-flex items-center gap-2 text-sm font-medium text-brand-lavender hover:text-brand-cyan transition border border-white/10 rounded-lg px-4 py-2.5"
         >
           <span>📊</span> View Sample Report
         </a>

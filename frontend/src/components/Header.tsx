@@ -4,23 +4,25 @@ export default function Header() {
   const location = useLocation();
 
   return (
-    <header className="bg-white border-b border-navy/8 px-4 sm:px-8 py-4 flex items-center justify-between sticky top-0 z-50">
-      <Link to="/" className="text-xl sm:text-2xl font-bold text-navy tracking-tight no-underline">
-        Nestfl<span className="text-orange">o</span>
+    <header className="bg-navy border-b border-white/8 px-4 sm:px-8 py-3 flex items-center justify-between sticky top-0 z-50">
+      <Link to="/" className="flex items-center no-underline">
+        <picture>
+          <source srcSet="/logo-dark.webp" type="image/webp" />
+          <img
+            src="/logo-dark.png"
+            alt="Nestflo"
+            className="h-14 sm:h-16 w-auto"
+          />
+        </picture>
       </Link>
-      <div className="flex items-center gap-3">
-        {location.pathname !== '/' && (
-          <Link
-            to="/"
-            className="text-sm text-gray-500 hover:text-navy transition-colors"
-          >
-            ← Products
-          </Link>
-        )}
-        <span className="bg-navy text-white text-xs font-semibold px-3 py-1.5 rounded-full tracking-wide">
-          HMO Market Intelligence
-        </span>
-      </div>
+      {location.pathname !== '/' && (
+        <Link
+          to="/"
+          className="text-sm text-brand-grey hover:text-white transition-colors"
+        >
+          ← Home
+        </Link>
+      )}
     </header>
   );
 }

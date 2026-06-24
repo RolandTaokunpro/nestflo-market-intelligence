@@ -25,6 +25,7 @@ from pydantic import BaseModel, EmailStr
 PORT = int(os.environ.get("PORT", "8898"))
 AGENTS_DIR = Path(__file__).resolve().parent.parent / ".."  # agents/echo/
 WORKSPACE = AGENTS_DIR.parent.parent  # openclaw/workspace/
+LOG_DIR = Path(__file__).resolve().parent / "logs"
 DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 IS_PROD = DIST_DIR.exists()
 
@@ -46,6 +47,12 @@ class TargetVsComparableRequest(BaseModel):
 class SubscribeRequest(BaseModel):
     email: EmailStr
 
+class ContactRequest(BaseModel):
+    name: str
+    email: EmailStr
+    company: str
+    message: str = ""
+
 # ── Helpers ──
 
 UK_POSTCODE_RE = re.compile(r'^[A-Z]{1,2}\d{1,2}[A-Z]?$')
@@ -54,9 +61,13 @@ def validate_uk_postcode(pc: str) -> bool:
     return bool(UK_POSTCODE_RE.match(pc.strip().upper()))
 
 def log_request(log_type: str, data: dict):
-    """Append to JSONL log file."""
+    """Append to JSONL log file. Falls back to local dir on remote."""
     log_path = WORKSPACE / "memory" / "echo" / "web_requests.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if not log_path.parent.exists():
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = LOG_DIR / "web_requests.jsonl"
+    else:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, 'a') as f:
         f.write(json.dumps({
             'timestamp': dt.datetime.utcnow().isoformat(),
@@ -207,6 +218,39 @@ async def api_subscribe(req: SubscribeRequest):
     """Product 3: Coming Soon email signup."""
     log_request('subscribe', {'email': req.email})
     return {"success": True, "message": "Subscribed. We'll notify you at launch."}
+
+
+@app.post("/api/contact")
+async def api_contact(req: ContactRequest):
+    """Enterprise contact form — sends enquiry to Roland."""
+    log_request('enterprise_contact', {
+        'name': req.name,
+        'email': req.email,
+        'company': req.company,
+        'message': req.message,
+    })
+
+    body_text = (
+        f"New Enterprise Enquiry\n"
+        f"=======================\n\n"
+        f"Name:    {req.name}\n"
+        f"Email:   {req.email}\n"
+        f"Company: {req.company}\n"
+        f"Message: {req.message or '(none)'}\n"
+    )
+
+    try:
+        subprocess.run([
+            'gog', 'gmail', 'send',
+            '--account', 'hello@kunpro.co.uk',
+            '--to', 'roland.tao@nestflo.com',
+            '--subject', f'Enterprise Enquiry — {req.company} ({req.name})',
+            '--body', body_text,
+        ], capture_output=True, text=True, timeout=30)
+        return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
+    except Exception as e:
+        print(f"Contact email failed: {e}")
+        return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
 
 
 # ── Serve React SPA (production) ──

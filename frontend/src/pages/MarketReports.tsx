@@ -1,8 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { CITIES, validatePostcode, getCityByPostcode, sortCities } from '../data/cities';
 
-const BACKEND_URL = 'https://issue-addressing-soviet-crops.trycloudflare.com';
-
 const MAX_POSTCODES = 3;
 const SORTED_CITIES = sortCities(CITIES);
 
@@ -105,7 +103,7 @@ export default function MarketReports() {
       params.append('postcodes', selectedPostcodes.join(','));
       params.append('email', email.trim());
       params.append('company_name', companyName.trim());
-      const resp = await fetch(`${BACKEND_URL}/submit-market-report`, {
+      const resp = await fetch('/api/market-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),

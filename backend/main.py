@@ -37,12 +37,14 @@ class MarketReportRequest(BaseModel):
     city: str
     postcodes: list[str]  # max 3
     email: EmailStr
+    company_name: str = ""
 
 class TargetVsComparableRequest(BaseModel):
     url: str
     first_name: str
     last_name: str
     email: EmailStr
+    company_name: str = ""
 
 class SubscribeRequest(BaseModel):
     email: EmailStr
@@ -99,6 +101,7 @@ async def api_market_report(req: MarketReportRequest):
         'city': req.city,
         'postcodes': unique_pcs,
         'email': req.email,
+        'company_name': req.company_name,
     })
 
     return {"success": True, "message": f"Request received. {len(unique_pcs)} postcode(s) queued for {req.city}."}
@@ -114,6 +117,7 @@ async def api_target_vs_comparable(request: Request):
     first = (params.get('first_name', [''])[0] or '').strip()
     last = (params.get('last_name', [''])[0] or '').strip()
     email = (params.get('email', [''])[0] or '').strip()
+    company_name = (params.get('company_name', [''])[0] or '').strip()
 
     errors = []
     if not url or 'spareroom.co.uk' not in url or 'flatshare' not in url:
@@ -137,6 +141,7 @@ async def api_target_vs_comparable(request: Request):
     log_request('target_vs_comparable', {
         'ad_id': ad_id, 'customer_name': customer_name,
         'customer_email': email, 'listing_url': url,
+        'company_name': company_name,
     })
 
     # Run pipeline in background thread

@@ -1,8 +1,6 @@
 import { useState } from 'react';
 
 // Backend URL — points to your Mac mini via cloudflare tunnel
-const BACKEND_URL = 'https://issue-addressing-soviet-crops.trycloudflare.com';
-
 export default function TargetVsComparable() {
   const [url, setUrl] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -54,7 +52,7 @@ export default function TargetVsComparable() {
       params.append('last_name', lastName.trim());
       params.append('email', email.trim());
       params.append('company_name', companyName.trim());
-      const resp = await fetch(`${BACKEND_URL}/submit`, {
+      const resp = await fetch('/api/target-vs-comparable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: params.toString(),

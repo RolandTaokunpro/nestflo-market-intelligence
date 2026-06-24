@@ -58,6 +58,12 @@ class ContactRequest(BaseModel):
 # ── Helpers ──
 
 UK_POSTCODE_RE = re.compile(r'^[A-Z]{1,2}\d{1,2}[A-Z]?$')
+FREE_EMAIL_DOMAINS = {'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com', 'gmx.com', 'ymail.com'}
+
+def is_business_email(email: str) -> bool:
+    """Reject free email providers."""
+    domain = email.split('@')[-1].lower() if '@' in email else ''
+    return domain and domain not in FREE_EMAIL_DOMAINS
 
 def validate_uk_postcode(pc: str) -> bool:
     return bool(UK_POSTCODE_RE.match(pc.strip().upper()))
@@ -86,6 +92,8 @@ async def api_market_report(req: MarketReportRequest):
     postcodes = [pc.strip().upper() for pc in req.postcodes]
     if len(postcodes) > 3:
         raise HTTPException(400, "Maximum 3 postcodes allowed.")
+    if not is_business_email(req.email):
+        raise HTTPException(400, "Business email required. Free email providers not accepted.")
     if len(postcodes) < 1:
         raise HTTPException(400, "At least 1 postcode required.")
 
@@ -131,6 +139,8 @@ async def api_target_vs_comparable(request: Request):
         errors.append('Last name required.')
     if not email or '@' not in email:
         errors.append('Valid email required.')
+    if email and '@' in email and not is_business_email(email):
+        errors.append('Business email required. Free email providers not accepted.')
 
     if errors:
         return JSONResponse({"success": False, "errors": errors}, status_code=400)
@@ -234,6 +244,9 @@ async def api_contact(req: ContactRequest):
         'company': req.company,
         'message': req.message,
     })
+
+    if not is_business_email(req.email):
+        raise HTTPException(400, "Business email required. Free email providers not accepted.")
 
     body_text = (
         f"New Enterprise Enquiry\n"

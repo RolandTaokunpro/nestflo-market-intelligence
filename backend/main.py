@@ -256,12 +256,15 @@ async def api_contact(req: ContactRequest):
 # ── Serve React SPA (production) ──
 
 if IS_PROD:
+    # Mount static assets directory
+    app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
+
+    # SPA catch-all: serve index.html for all non-asset, non-API routes
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         file_path = DIST_DIR / full_path
-        if full_path and file_path.exists() and file_path.is_file():
+        if file_path.is_file():
             return FileResponse(file_path)
-        # Fall through to index.html for React Router
         return FileResponse(DIST_DIR / "index.html")
 
     @app.get("/")

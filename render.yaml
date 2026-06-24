@@ -1,16 +1,10 @@
 services:
   - type: web
     name: nestflo-market-intelligence
-    env: python
+    env: docker
     region: frankfurt
     plan: free
-    buildCommand: |
-      apt-get update && apt-get install -y nodejs npm
-      cd frontend && npm install && npm run build
-      pip install -r backend/requirements.txt
-    startCommand: cd backend && python3 main.py
+    dockerfilePath: ./Dockerfile
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12"
       - key: PORT
         value: "10000"

@@ -109,6 +109,19 @@ class ContactRequest(BaseModel):
 # ── Helpers ──
 
 UK_POSTCODE_RE = re.compile(r'^[A-Z]{1,2}\d{1,2}[A-Z]?$')
+
+# Valid UK postcode area prefixes (124 areas)
+VALID_POSTCODE_AREAS = frozenset([
+    'AB','AL','B','BA','BB','BD','BH','BL','BN','BR','BS','BT','CA','CB',
+    'CF','CH','CM','CO','CR','CT','CV','CW','DA','DD','DE','DG','DH','DL',
+    'DN','DT','DY','E','EC','EH','EN','EX','FK','FY','G','GL','GU','GY',
+    'HA','HD','HG','HP','HR','HS','HU','HX','IG','IM','IP','IV','JE','KA',
+    'KT','KW','KY','L','LA','LD','LE','LL','LN','LS','LU','M','ME','MK',
+    'ML','N','NE','NG','NN','NP','NR','NW','OL','OX','PA','PE','PH','PL',
+    'PO','PR','RG','RH','RM','S','SA','SE','SG','SK','SL','SM','SN','SO',
+    'SP','SR','SS','ST','SW','SY','TA','TD','TF','TN','TQ','TR','TS','TW',
+    'UB','W','WA','WC','WD','WF','WN','WR','WS','WV','YO','ZE',
+])
 FREE_EMAIL_DOMAINS = {'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com', 'gmx.com', 'ymail.com'}
 
 def is_business_email(email: str) -> bool:
@@ -117,7 +130,15 @@ def is_business_email(email: str) -> bool:
     return domain and domain not in FREE_EMAIL_DOMAINS
 
 def validate_uk_postcode(pc: str) -> bool:
-    return bool(UK_POSTCODE_RE.match(pc.strip().upper()))
+    """Validate UK postcode format AND area prefix."""
+    pc = pc.strip().upper()
+    if not UK_POSTCODE_RE.match(pc):
+        return False
+    # Extract area prefix: 1 or 2 letters before digits
+    area_match = re.match(r'^([A-Z]{1,2})\d', pc)
+    if not area_match:
+        return False
+    return area_match.group(1) in VALID_POSTCODE_AREAS
 
 def log_request(log_type: str, data: dict):
     """Append to JSONL log file. Falls back to local dir on remote."""
@@ -432,6 +453,8 @@ if IS_PROD:
     # SPA catch-all: serve index.html for all non-asset, non-API routes
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(404, "API endpoint not found")
         file_path = DIST_DIR / full_path
         if file_path.is_file():
             return FileResponse(file_path)

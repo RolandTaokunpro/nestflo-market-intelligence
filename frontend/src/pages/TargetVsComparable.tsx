@@ -257,8 +257,12 @@ export default function TargetVsComparable() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={submitting}
-          className="w-full py-3 rounded-lg text-sm font-semibold bg-orange text-white hover:bg-orange-dark transition disabled:bg-gray-300 disabled:text-brand-grey disabled:cursor-not-allowed"
+          disabled={!isValid || submitting}
+          className={`w-full py-3 rounded-lg text-sm font-semibold transition ${
+            isValid && !submitting
+              ? 'bg-orange text-white hover:bg-orange-dark cursor-pointer'
+              : 'bg-white/10 text-brand-grey cursor-not-allowed'
+          }`}
         >
           {submitting ? 'Processing…' : 'Create Report'}
         </button>

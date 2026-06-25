@@ -63,11 +63,21 @@ RATE_LIMIT: dict[str, list[float]] = {}
 RATE_MAX_REQUESTS = 10  # max requests
 RATE_WINDOW = 60  # per 60 seconds
 
+def _get_client_ip(request: Request) -> str:
+    """Get real client IP, respecting X-Forwarded-For when behind a proxy."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        # Take the first IP in the chain (the original client)
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    if request.url.path.startswith("/api/"):
+    if request.url.path.startswith("/api/") and request.method != "OPTIONS":
         now = dt.datetime.utcnow().timestamp()
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = _get_client_ip(request)
         timestamps = RATE_LIMIT.get(client_ip, [])
         # Prune old timestamps
         timestamps = [t for t in timestamps if now - t < RATE_WINDOW]
@@ -140,6 +150,16 @@ def validate_uk_postcode(pc: str) -> bool:
         return False
     return area_match.group(1) in VALID_POSTCODE_AREAS
 
+# HTML tag pattern for stripping XSS from text fields
+HTML_TAG_RE = re.compile(r'<[^>]*>')
+MAX_NAME_LENGTH = 100
+MAX_COMPANY_LENGTH = 200
+
+def sanitize_text(value: str, max_length: int = MAX_NAME_LENGTH) -> str:
+    """Strip HTML tags and truncate to max length."""
+    cleaned = HTML_TAG_RE.sub('', value).strip()
+    return cleaned[:max_length]
+
 def log_request(log_type: str, data: dict):
     """Append to JSONL log file. Falls back to local dir on remote."""
     log_path = WORKSPACE / "memory" / "echo" / "web_requests.jsonl"
@@ -206,25 +226,30 @@ async def api_market_report(req: MarketReportRequest):
     # Remove duplicates
     unique_pcs = list(dict.fromkeys(postcodes))
 
+    # Sanitize user inputs
+    safe_first = sanitize_text(req.first_name)
+    safe_last = sanitize_text(req.last_name)
+    safe_company = sanitize_text(req.company_name, MAX_COMPANY_LENGTH)
+
     # Log the request
     log_request('market_report', {
         'city': req.city,
         'postcodes': unique_pcs,
-        'first_name': req.first_name.strip(),
-        'last_name': req.last_name.strip(),
+        'first_name': safe_first,
+        'last_name': safe_last,
         'email': req.email,
-        'company_name': req.company_name,
+        'company_name': safe_company,
     })
 
     # Forward to Mac mini pipeline receiver, or run locally as fallback
-    customer_name = f"{req.first_name.strip()} {req.last_name.strip()}"
+    customer_name = f"{safe_first} {safe_last}"
     forwarded = forward_to_macmini("/api/pipeline/market-report", {
         "city": req.city,
         "postcodes": unique_pcs,
-        "first_name": req.first_name.strip(),
-        "last_name": req.last_name.strip(),
+        "first_name": safe_first,
+        "last_name": safe_last,
         "email": req.email,
-        "company_name": req.company_name,
+        "company_name": safe_company,
     })
 
     if forwarded:
@@ -306,22 +331,27 @@ async def api_target_vs_comparable(request: Request):
         return JSONResponse({"success": False, "errors": errors}, status_code=400)
 
     ad_id = ad_id_match.group(1)
-    customer_name = f"{first} {last}"
+
+    # Sanitize user inputs
+    safe_first = sanitize_text(first)
+    safe_last = sanitize_text(last)
+    safe_company = sanitize_text(company_name, MAX_COMPANY_LENGTH)
+    customer_name = f"{safe_first} {safe_last}"
 
     log_request('target_vs_comparable', {
         'ad_id': ad_id, 'customer_name': customer_name,
         'customer_email': email, 'listing_url': url,
-        'company_name': company_name,
+        'company_name': safe_company,
     })
 
     # Forward to Mac mini pipeline receiver, or run locally as fallback
     forwarded = forward_to_macmini("/api/pipeline/target-vs-comparable", {
         "url": url,
         "ad_id": ad_id,
-        "first_name": first,
-        "last_name": last,
+        "first_name": safe_first,
+        "last_name": safe_last,
         "email": email,
-        "company_name": company_name,
+        "company_name": safe_company,
     })
 
     if forwarded:

@@ -36,6 +36,8 @@ app = FastAPI(title="Nestflo Market Intelligence API", version="1.0.0")
 class MarketReportRequest(BaseModel):
     city: str
     postcodes: list[str]  # max 3
+    first_name: str = ""
+    last_name: str = ""
     email: EmailStr
     company_name: str = ""
 
@@ -94,6 +96,10 @@ async def api_market_report(req: MarketReportRequest):
         raise HTTPException(400, "Maximum 3 postcodes allowed.")
     if not is_business_email(req.email):
         raise HTTPException(400, "Business email required. Free email providers not accepted.")
+    if not req.first_name or not req.first_name.strip():
+        raise HTTPException(400, "First name is required.")
+    if not req.last_name or not req.last_name.strip():
+        raise HTTPException(400, "Last name is required.")
     if len(postcodes) < 1:
         raise HTTPException(400, "At least 1 postcode required.")
 
@@ -108,6 +114,8 @@ async def api_market_report(req: MarketReportRequest):
     log_request('market_report', {
         'city': req.city,
         'postcodes': unique_pcs,
+        'first_name': req.first_name.strip(),
+        'last_name': req.last_name.strip(),
         'email': req.email,
         'company_name': req.company_name,
     })

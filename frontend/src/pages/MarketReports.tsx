@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { CITIES, validatePostcode, getCityByPostcode, sortCities } from '../data/cities';
 
 const MAX_POSTCODES = 3;
@@ -15,6 +15,11 @@ export default function MarketReports() {
   const [entries, setEntries] = useState<PostcodeEntry[]>([
     { id: 1, value: '', touched: false },
   ]);
+  const [firstName, setFirstName] = useState('');
+  const [firstNameTouched, setFirstNameTouched] = useState(false);
+  const [lastName, setLastName] = useState('');
+  const [lastNameTouched, setLastNameTouched] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
   const [email, setEmail] = useState('');
   const [emailTouched, setEmailTouched] = useState(false);
   const [companyName, setCompanyName] = useState('');
@@ -55,23 +60,58 @@ export default function MarketReports() {
         return;
       }
     });
+    if (nameTouched) {
+      if (!firstName.trim()) errs.firstName = 'First name is required.';
+      else if (firstName.trim().length < 2) errs.firstName = 'First name must be at least 2 characters.';
+      if (!lastName.trim()) errs.lastName = 'Last name is required.';
+      else if (lastName.trim().length < 2) errs.lastName = 'Last name must be at least 2 characters.';
+    }
     if (emailTouched && email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !isBusinessEmail(email)) {
       errs.email = 'Please use a business email address (not @gmail.com, @yahoo.com, etc.).';
     }
     return errs;
-  }, [selectedCity, entries, city, email, emailTouched]);
+  }, [selectedCity, entries, city, firstName, lastName, nameTouched, email, emailTouched]);
 
   const hasAtLeastOneValid = selectedPostcodes.length >= 1 && Object.keys(errors).length === 0;
-  const isValid = selectedCity && hasAtLeastOneValid && email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && isBusinessEmail(email) && companyName.trim().length > 0;
+  const isValid = (
+    selectedCity &&
+    hasAtLeastOneValid &&
+    firstName.trim().length >= 2 &&
+    lastName.trim().length >= 2 &&
+    email.trim() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+    isBusinessEmail(email) &&
+    companyName.trim().length > 0
+  );
+
+  // Track whether both name fields have been touched
+  useEffect(() => {
+    if (firstNameTouched && lastNameTouched) {
+      setNameTouched(true);
+    }
+  }, [firstNameTouched, lastNameTouched]);
+
+  // Reset all form fields
+  const resetForm = useCallback(() => {
+    setEntries([{ id: 1, value: '', touched: false }]);
+    nextId.current = 2;
+    setFirstName('');
+    setFirstNameTouched(false);
+    setLastName('');
+    setLastNameTouched(false);
+    setNameTouched(false);
+    setEmail('');
+    setEmailTouched(false);
+    setCompanyName('');
+    setCompanyNameTouched(false);
+  }, []);
   const canAddMore = entries.length < MAX_POSTCODES;
 
   const handleCityChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedCity(e.target.value);
     setFeedback(null);
-    // Reset postcodes when city changes
-    setEntries([{ id: 1, value: '', touched: false }]);
-    nextId.current = 2;
-  }, []);
+    resetForm();
+  }, [resetForm]);
 
   const handlePostcodeChange = useCallback((id: number, value: string) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, value, touched: true } : e));
@@ -98,26 +138,29 @@ export default function MarketReports() {
     setFeedback(null);
 
     try {
-      const params = new URLSearchParams();
-      params.append('city', selectedCity);
-      params.append('postcodes', selectedPostcodes.join(','));
-      params.append('email', email.trim());
-      params.append('company_name', companyName.trim());
+      // Mark all fields as touched for validation before submit
+      setFirstNameTouched(true);
+      setLastNameTouched(true);
+      setNameTouched(true);
+
+      const body = JSON.stringify({
+        city: selectedCity,
+        postcodes: selectedPostcodes,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim(),
+        company_name: companyName.trim(),
+      });
       const resp = await fetch('/api/market-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
+        headers: { 'Content-Type': 'application/json' },
+        body,
       });
       const data = await resp.json();
       if (data.success) {
         setFeedback({ type: 'success', message: `Request received! We'll process ${selectedPostcodes.join(', ')} for ${city?.name} and email your reports to ${email.trim()}.` });
-        setEntries([{ id: 1, value: '', touched: false }]);
-        setEmail('');
-        setEmailTouched(false);
-        setCompanyName('');
-        setCompanyNameTouched(false);
+        resetForm();
         setSelectedCity('');
-        nextId.current = 2;
       } else {
         setFeedback({ type: 'error', message: data.errors?.join(' ') || 'Submission failed. Please try again.' });
       }
@@ -298,6 +341,48 @@ export default function MarketReports() {
               ).slice(0, 8).join(', ')}{(city?.postcodes.length ?? 0) > 8 ? '…' : ''}
             </p>
           )}
+        </div>
+
+        {/* Name row */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-semibold text-white mb-1.5">
+              First Name
+            </label>
+            <input
+              type="text"
+              id="firstName"
+              value={firstName}
+              onChange={e => { setFirstName(e.target.value); setFirstNameTouched(true); }}
+              placeholder="e.g. John"
+              className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
+                firstNameTouched && errors.firstName ? 'border-red-400' : 'border-white/15'
+              }`}
+              aria-describedby="firstName-error"
+            />
+            {firstNameTouched && errors.firstName && (
+              <p id="firstName-error" className="text-xs text-red-500 mt-1">{errors.firstName}</p>
+            )}
+          </div>
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-semibold text-white mb-1.5">
+              Last Name
+            </label>
+            <input
+              type="text"
+              id="lastName"
+              value={lastName}
+              onChange={e => { setLastName(e.target.value); setLastNameTouched(true); }}
+              placeholder="e.g. Smith"
+              className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
+                lastNameTouched && errors.lastName ? 'border-red-400' : 'border-white/15'
+              }`}
+              aria-describedby="lastName-error"
+            />
+            {lastNameTouched && errors.lastName && (
+              <p id="lastName-error" className="text-xs text-red-500 mt-1">{errors.lastName}</p>
+            )}
+          </div>
         </div>
 
         {/* Company Name */}

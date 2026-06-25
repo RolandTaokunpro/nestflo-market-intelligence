@@ -25,6 +25,8 @@ from pydantic import BaseModel, EmailStr
 
 # ── Config ──
 PORT = int(os.environ.get("PORT", "8898"))
+PIPELINE_BACKEND_URL = os.environ.get("PIPELINE_BACKEND_URL", "").rstrip('/')
+PIPELINE_API_KEY = os.environ.get("PIPELINE_API_KEY", "")
 AGENTS_DIR = Path(__file__).resolve().parent.parent / ".."  # agents/echo/
 WORKSPACE = AGENTS_DIR.parent.parent  # openclaw/workspace/
 LOG_DIR = Path(__file__).resolve().parent / "logs"
@@ -132,6 +134,32 @@ def log_request(log_type: str, data: dict):
             **data,
         }) + '\n')
 
+def forward_to_macmini(endpoint: str, payload: dict) -> bool:
+    """Forward a validated pipeline request to the Mac mini via Cloudflare tunnel.
+    Returns True if the forward succeeded, False otherwise."""
+    if not PIPELINE_BACKEND_URL:
+        print("⚠️  PIPELINE_BACKEND_URL not set — cannot forward")
+        return False
+
+    try:
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            f"{PIPELINE_BACKEND_URL}{endpoint}",
+            data=data,
+            headers={
+                'Content-Type': 'application/json',
+                'X-API-Key': PIPELINE_API_KEY,
+            },
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+            print(f"✅ Forwarded to Mac mini: {result}")
+            return True
+    except Exception as e:
+        print(f"⚠️  Forward to Mac mini failed: {e}")
+        return False
+
 # ── API Routes ──
 
 @app.post("/api/market-report")
@@ -167,8 +195,21 @@ async def api_market_report(req: MarketReportRequest):
         'company_name': req.company_name,
     })
 
-    # Run market report pipeline in background thread
+    # Forward to Mac mini pipeline receiver, or run locally as fallback
     customer_name = f"{req.first_name.strip()} {req.last_name.strip()}"
+    forwarded = forward_to_macmini("/api/pipeline/market-report", {
+        "city": req.city,
+        "postcodes": unique_pcs,
+        "first_name": req.first_name.strip(),
+        "last_name": req.last_name.strip(),
+        "email": req.email,
+        "company_name": req.company_name,
+    })
+
+    if forwarded:
+        return {"success": True, "message": f"Request forwarded. {len(unique_pcs)} postcode(s) queued for {req.city}."}
+
+    # Fallback: run locally (only works when this server is on the Mac mini)
     def run_market_report_pipeline():
         try:
             script = AGENTS_DIR / "market_report_orchestrator.py"
@@ -252,7 +293,20 @@ async def api_target_vs_comparable(request: Request):
         'company_name': company_name,
     })
 
-    # Run pipeline in background thread
+    # Forward to Mac mini pipeline receiver, or run locally as fallback
+    forwarded = forward_to_macmini("/api/pipeline/target-vs-comparable", {
+        "url": url,
+        "ad_id": ad_id,
+        "first_name": first,
+        "last_name": last,
+        "email": email,
+        "company_name": company_name,
+    })
+
+    if forwarded:
+        return {"success": True, "message": "Request forwarded. Processing."}
+
+    # Fallback: run locally (only works when this server is on the Mac mini)
     def run_pipeline():
         try:
             result = subprocess.run(

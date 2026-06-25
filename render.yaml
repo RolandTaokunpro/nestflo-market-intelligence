@@ -8,3 +8,9 @@ services:
     envVars:
       - key: PORT
         value: "10000"
+      - key: PIPELINE_BACKEND_URL
+        sync: false
+        value: ""
+      - key: PIPELINE_API_KEY
+        sync: false
+        value: ""

@@ -358,6 +358,7 @@ export default function MarketReports() {
               className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
                 firstNameTouched && errors.firstName ? 'border-red-400' : 'border-white/15'
               }`}
+              maxLength={100}
               aria-describedby="firstName-error"
             />
             {firstNameTouched && errors.firstName && (
@@ -377,6 +378,7 @@ export default function MarketReports() {
               className={`w-full p-3 border rounded-lg text-sm bg-navy text-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition ${
                 lastNameTouched && errors.lastName ? 'border-red-400' : 'border-white/15'
               }`}
+              maxLength={100}
               aria-describedby="lastName-error"
             />
             {lastNameTouched && errors.lastName && (

@@ -102,7 +102,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Your full name"
-                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
+                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
                   required
                 />
               </div>
@@ -117,7 +117,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
                   value={company}
                   onChange={e => setCompany(e.target.value)}
                   placeholder="Your business or agency name"
-                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
+                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
                   required
                 />
               </div>
@@ -132,7 +132,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@yourcompany.co.uk"
-                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
+                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange/30 transition"
                   required
                 />
               </div>
@@ -147,7 +147,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
                   onChange={e => setMessage(e.target.value)}
                   placeholder="Tell us about your reporting needs…"
                   rows={3}
-                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange/30 transition resize-none"
+                  className="w-full p-3 border border-white/15 rounded-lg text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange/30 transition resize-none"
                 />
               </div>
 

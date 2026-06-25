@@ -110,8 +110,10 @@ export default function MarketReports() {
   const handleCityChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedCity(e.target.value);
     setFeedback(null);
-    resetForm();
-  }, [resetForm]);
+    // Only reset postcode entries — preserve name, email, company
+    setEntries([{ id: 1, value: '', touched: false }]);
+    nextId.current = 2;
+  }, []);
 
   const handlePostcodeChange = useCallback((id: number, value: string) => {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, value, touched: true } : e));

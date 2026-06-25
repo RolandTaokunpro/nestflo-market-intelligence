@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -13,6 +13,47 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Focus trap: lock focus inside modal when open
+  useEffect(() => {
+    if (!isOpen) return;
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    // Focus the close button on open
+    const closeBtn = modal.querySelector<HTMLButtonElement>('[aria-label="Close"]');
+    closeBtn?.focus();
+
+    const focusableSelectors = [
+      'a[href]', 'button:not([disabled])', 'textarea:not([disabled])',
+      'input:not([disabled])', 'select:not([disabled])', '[tabindex]:not([tabindex="-1"])',
+    ];
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const focusable = modal.querySelectorAll<HTMLElement>(focusableSelectors.join(', '));
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -65,7 +106,7 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-navy-light rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
+      <div ref={modalRef} className="relative bg-navy-light rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-brand-grey hover:text-white transition-colors text-xl leading-none"

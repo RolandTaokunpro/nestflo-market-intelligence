@@ -5,7 +5,10 @@
 interface SubmitMarketReportRequest {
   city: string;
   postcodes: string[];
+  first_name: string;
+  last_name: string;
   email: string;
+  company_name: string;
 }
 
 interface SubmitTargetVsComparableRequest {
@@ -13,6 +16,7 @@ interface SubmitTargetVsComparableRequest {
   first_name: string;
   last_name: string;
   email: string;
+  company_name: string;
 }
 
 interface ApiResponse {

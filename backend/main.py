@@ -13,10 +13,12 @@ import re
 import subprocess
 import sys
 import threading
+import urllib.parse
 import datetime as dt
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, EmailStr
@@ -30,6 +32,51 @@ DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 IS_PROD = DIST_DIR.exists()
 
 app = FastAPI(title="Nestflo Market Intelligence API", version="1.0.0")
+
+# ── Middleware ──
+
+# Security headers
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    return response
+
+# Rate limiting — simple in-memory throttle
+RATE_LIMIT: dict[str, list[float]] = {}
+RATE_MAX_REQUESTS = 10  # max requests
+RATE_WINDOW = 60  # per 60 seconds
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    if request.url.path.startswith("/api/"):
+        now = dt.datetime.utcnow().timestamp()
+        client_ip = request.client.host if request.client else "unknown"
+        timestamps = RATE_LIMIT.get(client_ip, [])
+        # Prune old timestamps
+        timestamps = [t for t in timestamps if now - t < RATE_WINDOW]
+        if len(timestamps) >= RATE_MAX_REQUESTS:
+            return JSONResponse(
+                {"detail": "Too many requests. Please wait before trying again."},
+                status_code=429,
+            )
+        timestamps.append(now)
+        RATE_LIMIT[client_ip] = timestamps
+    return await call_next(request)
 
 # ── Models ──
 
@@ -119,6 +166,49 @@ async def api_market_report(req: MarketReportRequest):
         'email': req.email,
         'company_name': req.company_name,
     })
+
+    # Run market report pipeline in background thread
+    customer_name = f"{req.first_name.strip()} {req.last_name.strip()}"
+    def run_market_report_pipeline():
+        try:
+            script = AGENTS_DIR / "market_report_orchestrator.py"
+            if not script.exists():
+                print(f"⚠️  Market report orchestrator not found at {script}")
+                log_request('pipeline_skip', {
+                    'reason': 'orchestrator_missing',
+                    'city': req.city,
+                    'postcodes': unique_pcs,
+                    'email': req.email,
+                })
+                return
+
+            for pc in unique_pcs:
+                result = subprocess.run(
+                    [sys.executable, str(script),
+                     "--city", req.city,
+                     "--postcode", pc,
+                     "--email", req.email,
+                     "--name", customer_name],
+                    cwd=str(AGENTS_DIR), capture_output=True, text=True, timeout=600
+                )
+                output = result.stdout + "\n" + result.stderr
+                qa_lines = [l for l in output.split('\n') if '✅' in l or '❌' in l]
+                qa_passed = sum(1 for l in qa_lines if '✅' in l)
+                qa_total = len(qa_lines)
+                log_request('market_report_complete', {
+                    'city': req.city, 'postcode': pc,
+                    'email': req.email, 'status': 'complete',
+                    'qa_passed': qa_passed, 'qa_total': qa_total,
+                })
+                print(f"✅ Market report complete for {pc}, {req.city} ({qa_passed}/{qa_total} QA)")
+
+        except subprocess.TimeoutExpired:
+            print(f"❌ Market report pipeline timed out for {req.city}")
+        except Exception as e:
+            print(f"❌ Market report pipeline error: {e}")
+            import traceback; traceback.print_exc()
+
+    threading.Thread(target=run_market_report_pipeline, daemon=True).start()
 
     return {"success": True, "message": f"Request received. {len(unique_pcs)} postcode(s) queued for {req.city}."}
 
@@ -302,7 +392,6 @@ if IS_PROD:
 
 if __name__ == '__main__':
     import uvicorn
-    import urllib.parse  # needed for TargetVsComparable form parsing
 
     print(f"\n{'='*60}")
     print(f"  Nestflo Market Intelligence API")

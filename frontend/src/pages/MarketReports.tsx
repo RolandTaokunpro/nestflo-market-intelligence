@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { CITIES, validatePostcode, getCityByPostcode, sortCities } from '../data/cities';
+import { isBusinessEmail } from '../constants';
 
 const MAX_POSTCODES = 3;
 const SORTED_CITIES = sortCities(CITIES);
@@ -27,12 +28,6 @@ export default function MarketReports() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const nextId = useRef(2);
-
-  const FREE_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com', 'gmx.com', 'ymail.com'];
-  const isBusinessEmail = (email: string) => {
-    const domain = email.split('@')[1]?.toLowerCase();
-    return domain && !FREE_EMAIL_DOMAINS.includes(domain);
-  };
 
   const city = useMemo(() => SORTED_CITIES.find(c => c.prefix === selectedCity), [selectedCity]);
 
@@ -191,7 +186,7 @@ export default function MarketReports() {
         </h2>
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="flex items-start gap-3">
-            <span className="text-orange text-lg flex-shrink-0 mt-0.5">&#x1F6E1;</span>
+            <span className="text-orange text-lg flex-shrink-0 mt-0.5" aria-hidden="true">&#x1F6E1;</span>
             <div>
               <p className="text-sm font-semibold text-white mb-1">SpareRoom won&rsquo;t save this data</p>
               <p className="text-xs text-brand-grey leading-relaxed">
@@ -200,7 +195,7 @@ export default function MarketReports() {
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <span className="text-orange text-lg flex-shrink-0 mt-0.5">&#x2696;&#xFE0F;</span>
+            <span className="text-orange text-lg flex-shrink-0 mt-0.5" aria-hidden="true">&#x2696;&#xFE0F;</span>
             <div>
               <p className="text-sm font-semibold text-white mb-1">Built to tribunal standard</p>
               <p className="text-xs text-brand-grey leading-relaxed">

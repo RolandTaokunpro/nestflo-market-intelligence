@@ -22,7 +22,7 @@ function BenefitCard({
 }) {
   return (
     <div className="bg-navy-light rounded-xl border border-white/8 p-6 sm:p-8 text-center sm:text-left">
-      <div className="w-12 h-12 bg-gradient-brand rounded-xl flex items-center justify-center text-2xl mb-4 mx-auto sm:mx-0 shadow-sm">
+      <div className="w-12 h-12 bg-gradient-brand rounded-xl flex items-center justify-center text-2xl mb-4 mx-auto sm:mx-0 shadow-sm" aria-hidden="true">
         {icon}
       </div>
       <h3 className="text-lg font-bold text-white mb-2">{title}</h3>

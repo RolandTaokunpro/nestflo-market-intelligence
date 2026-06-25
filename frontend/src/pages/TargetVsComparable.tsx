@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isBusinessEmail } from '../constants';
 
 // Backend URL — points to your Mac mini via cloudflare tunnel
 export default function TargetVsComparable() {
@@ -12,12 +13,6 @@ export default function TargetVsComparable() {
   const [success, setSuccess] = useState(false);
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  const FREE_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com', 'gmx.com', 'ymail.com'];
-  const isBusinessEmail = (email: string) => {
-    const domain = email.split('@')[1]?.toLowerCase();
-    return domain && !FREE_EMAIL_DOMAINS.includes(domain);
-  };
 
   const errors: Record<string, string> = {};
   if (touched.url) {
@@ -111,7 +106,7 @@ export default function TargetVsComparable() {
         </h2>
         <div className="grid sm:grid-cols-2 gap-4">
           <div className="flex items-start gap-3">
-            <span className="text-brand-cyan text-lg flex-shrink-0 mt-0.5">&#x1F4CB;</span>
+            <span className="text-brand-cyan text-lg flex-shrink-0 mt-0.5" aria-hidden="true">&#x1F4CB;</span>
             <div>
               <p className="text-sm font-semibold text-white mb-1">Justify any rent change</p>
               <p className="text-xs text-brand-grey leading-relaxed">
@@ -121,7 +116,7 @@ export default function TargetVsComparable() {
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <span className="text-brand-cyan text-lg flex-shrink-0 mt-0.5">&#x1F3AF;</span>
+            <span className="text-brand-cyan text-lg flex-shrink-0 mt-0.5" aria-hidden="true">&#x1F3AF;</span>
             <div>
               <p className="text-sm font-semibold text-white mb-1">Professional credibility</p>
               <p className="text-xs text-brand-grey leading-relaxed">

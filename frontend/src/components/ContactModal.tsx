@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { isBusinessEmail } from '../constants';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -56,16 +57,6 @@ export default function ContactModal({ isOpen, onClose }: ContactModalProps) {
   }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const FREE_EMAIL_DOMAINS = [
-    'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com',
-    'icloud.com', 'me.com', 'protonmail.com', 'aol.com', 'mail.com',
-    'gmx.com', 'ymail.com',
-  ];
-  const isBusinessEmail = (e: string) => {
-    const domain = e.split('@')[1]?.toLowerCase();
-    return domain && !FREE_EMAIL_DOMAINS.includes(domain);
-  };
 
   const isValid =
     name.trim() && company.trim() && email.trim() &&

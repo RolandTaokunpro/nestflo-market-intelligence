@@ -175,31 +175,41 @@ def log_request(log_type: str, data: dict):
             **data,
         }) + '\n')
 
-def forward_to_macmini(endpoint: str, payload: dict) -> bool:
+def forward_to_macmini(endpoint: str, payload: dict) -> tuple[bool, str]:
     """Forward a validated pipeline request to the Mac mini via Cloudflare tunnel.
-    Returns True if the forward succeeded, False otherwise."""
+    Returns (success, message)."""
     if not PIPELINE_BACKEND_URL:
-        print("⚠️  PIPELINE_BACKEND_URL not set — cannot forward")
-        return False
+        msg = "PIPELINE_BACKEND_URL not set"
+        print(f"⚠️  {msg}")
+        return False, msg
 
-    try:
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            f"{PIPELINE_BACKEND_URL}{endpoint}",
-            data=data,
-            headers={
-                'Content-Type': 'application/json',
-                'X-API-Key': PIPELINE_API_KEY,
-            },
-            method='POST',
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
-            print(f"✅ Forwarded to Mac mini: {result}")
-            return True
-    except Exception as e:
-        print(f"⚠️  Forward to Mac mini failed: {e}")
-        return False
+    import requests
+    url = f"{PIPELINE_BACKEND_URL}{endpoint}"
+    headers = {"Content-Type": "application/json", "X-API-Key": PIPELINE_API_KEY}
+    last_error = None
+
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=30)
+            if resp.status_code == 200:
+                result = resp.json()
+                print(f"✅ Forwarded to Mac mini: {result}")
+                return True, "Forwarded"
+            last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except requests.exceptions.Timeout:
+            last_error = "Timeout (30s)"
+        except requests.exceptions.ConnectionError as e:
+            last_error = f"Connection error: {e}"
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
+
+        if attempt < 2:
+            import time
+            time.sleep(2)
+
+    msg = f"Forward failed after 3 attempts: {last_error}"
+    print(f"⚠️  {msg}")
+    return False, msg
 
 # ── API Routes ──
 
@@ -243,7 +253,7 @@ async def api_market_report(req: MarketReportRequest):
 
     # Forward to Mac mini pipeline receiver, or run locally as fallback
     customer_name = f"{safe_first} {safe_last}"
-    forwarded = forward_to_macmini("/api/pipeline/market-report", {
+    forwarded, fwd_msg = forward_to_macmini("/api/pipeline/market-report", {
         "city": req.city,
         "postcodes": unique_pcs,
         "first_name": safe_first,
@@ -297,7 +307,7 @@ async def api_market_report(req: MarketReportRequest):
 
     threading.Thread(target=run_market_report_pipeline, daemon=True).start()
 
-    return {"success": True, "message": f"Request received. {len(unique_pcs)} postcode(s) queued for {req.city}."}
+    return {"success": True, "message": f"Request received. {len(unique_pcs)} postcode(s) queued for {req.city}. (Forward: {fwd_msg})"}
 
 
 @app.post("/api/target-vs-comparable")
@@ -345,7 +355,7 @@ async def api_target_vs_comparable(request: Request):
     })
 
     # Forward to Mac mini pipeline receiver, or run locally as fallback
-    forwarded = forward_to_macmini("/api/pipeline/target-vs-comparable", {
+    forwarded, fwd_msg = forward_to_macmini("/api/pipeline/target-vs-comparable", {
         "url": url,
         "ad_id": ad_id,
         "first_name": safe_first,
@@ -356,6 +366,9 @@ async def api_target_vs_comparable(request: Request):
 
     if forwarded:
         return {"success": True, "message": "Request forwarded. Processing."}
+
+    # Forward failed — report the error so we can debug
+    print(f"⚠️  Forward failed: {fwd_msg}")
 
     # Fallback: run locally (only works when this server is on the Mac mini)
     def run_pipeline():
@@ -428,7 +441,7 @@ async def api_target_vs_comparable(request: Request):
             import traceback; traceback.print_exc()
 
     threading.Thread(target=run_pipeline, daemon=True).start()
-    return {"success": True, "message": "Request received. Processing."}
+    return {"success": True, "message": f"Request received. Processing. (Forward: {fwd_msg})"}
 
 
 @app.post("/api/subscribe")

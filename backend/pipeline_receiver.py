@@ -36,6 +36,7 @@ ACTUAL_WORKSPACE = Path(__file__).resolve().parent.parent.parent  # ...openclaw/
 WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # ...openclaw/ (legacy)
 ECHO_MEMORY = ACTUAL_WORKSPACE / "memory" / "echo"
 LOG_DIR = Path(__file__).resolve().parent / "logs"
+LARK_WEBHOOK_URL = os.environ.get("LARK_WEBHOOK_URL", "")
 
 app = FastAPI(title="Nestflo Pipeline Receiver", version="1.0.0")
 
@@ -131,6 +132,59 @@ def log_request(log_type: str, data: dict):
                 'status': 'complete',
             }) + '\n')
 
+
+# ── Lark notification ──
+
+def notify_lark(product: str, customer_name: str, email: str,
+                company_name: str, detail: str, detail_label: str):
+    """Post a new-order notification to the Echo Lark channel via webhook."""
+    if not LARK_WEBHOOK_URL:
+        print("⚠️  LARK_WEBHOOK_URL not set — skipping Lark notification")
+        return
+
+    import requests
+    now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
+    body = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": f"🆕 New {product} Order"},
+                "template": "indigo",
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": (
+                            f"**Customer:** {customer_name}\n"
+                            f"**Company:** {company_name or '—'}\n"
+                            f"**Email:** {email}\n"
+                            f"**{detail_label}:** {detail}\n"
+                            f"**Time:** {now}"
+                        ),
+                    },
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "note",
+                    "elements": [
+                        {"tag": "plain_text", "content": "Echo pipeline receiver — automated notification"}
+                    ],
+                },
+            ],
+        },
+    }
+
+    try:
+        resp = requests.post(LARK_WEBHOOK_URL, json=body, timeout=10)
+        if resp.status_code == 200:
+            print(f"✅ Lark notification sent for {product}: {customer_name}")
+        else:
+            print(f"⚠️  Lark webhook returned {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"⚠️  Lark notification failed: {e}")
+
 # ── API Routes ──
 
 @app.post("/api/pipeline/market-report")
@@ -147,6 +201,16 @@ async def receive_market_report(payload: MarketReportPayload, request: Request):
         'email': payload.email,
         'company_name': payload.company_name,
     })
+
+    # Notify Echo Lark channel
+    notify_lark(
+        product="HMO Market Report",
+        customer_name=customer_name,
+        email=payload.email,
+        company_name=payload.company_name,
+        detail=", ".join(unique_pcs),
+        detail_label="Postcodes",
+    )
 
     def run():
         script = AGENTS_DIR / "market_report_orchestrator.py"
@@ -194,6 +258,16 @@ async def receive_target_vs_comparable(payload: TargetVsComparablePayload, reque
         'listing_url': payload.url,
         'company_name': payload.company_name,
     })
+
+    # Notify Echo Lark channel
+    notify_lark(
+        product="Target vs Comparable",
+        customer_name=customer_name,
+        email=payload.email,
+        company_name=payload.company_name,
+        detail=f"Ad {payload.ad_id}",
+        detail_label="Ad ID",
+    )
 
     def run():
         try:

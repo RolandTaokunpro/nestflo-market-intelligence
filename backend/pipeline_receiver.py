@@ -32,7 +32,9 @@ from pydantic import BaseModel
 PORT = int(os.environ.get("PORT", "8899"))
 PIPELINE_API_KEY = os.environ.get("PIPELINE_API_KEY", "changeme")
 AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "agents" / "echo"
-WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # openclaw/workspace/
+ACTUAL_WORKSPACE = Path(__file__).resolve().parent.parent.parent  # ...openclaw/workspace/
+WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # ...openclaw/ (legacy)
+ECHO_MEMORY = ACTUAL_WORKSPACE / "memory" / "echo"
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 
 app = FastAPI(title="Nestflo Pipeline Receiver", version="1.0.0")
@@ -65,14 +67,69 @@ def verify_api_key(request: Request):
 # ── Helpers ──
 
 def log_request(log_type: str, data: dict):
+    """Log to pipeline_requests.jsonl AND Echo's queue files."""
     log_path = WORKSPACE / "memory" / "echo" / "pipeline_requests.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {'timestamp': dt.datetime.utcnow().isoformat(), 'type': log_type, **data}
     with open(log_path, 'a') as f:
-        f.write(json.dumps({
-            'timestamp': dt.datetime.utcnow().isoformat(),
-            'type': log_type,
-            **data,
-        }) + '\n')
+        f.write(json.dumps(entry) + '\n')
+
+    # Also write to Echo's queue files so Echo knows about incoming requests
+    ECHO_MEMORY.mkdir(parents=True, exist_ok=True)
+
+    if log_type == 'target_vs_comparable_received':
+        tvc_path = ECHO_MEMORY / 'tvc_requests.jsonl'
+        with open(tvc_path, 'a') as f:
+            f.write(json.dumps({
+                'timestamp': entry['timestamp'],
+                'ad_id': data.get('ad_id', ''),
+                'customer_name': data.get('customer_name', ''),
+                'customer_email': data.get('email', ''),
+                'listing_url': data.get('listing_url', ''),
+                'company_name': data.get('company_name', ''),
+                'status': 'queued',
+            }) + '\n')
+
+    elif log_type == 'target_vs_comparable_complete':
+        tvc_path = ECHO_MEMORY / 'tvc_requests.jsonl'
+        with open(tvc_path, 'a') as f:
+            f.write(json.dumps({
+                'timestamp': entry['timestamp'],
+                'ad_id': data.get('ad_id', ''),
+                'postcode': data.get('postcode', ''),
+                'room_type': data.get('room_type', ''),
+                'rent': data.get('rent', ''),
+                'p50': data.get('p50', ''),
+                'qa_passed': data.get('qa_passed', 0),
+                'qa_total': data.get('qa_total', 0),
+                'status': 'complete',
+            }) + '\n')
+
+    elif log_type == 'market_report_received':
+        mr_path = ECHO_MEMORY / 'market_report_requests.jsonl'
+        for pc in data.get('postcodes', []):
+            with open(mr_path, 'a') as f:
+                f.write(json.dumps({
+                    'timestamp': entry['timestamp'],
+                    'postcode': pc,
+                    'city': data.get('city', ''),
+                    'email': data.get('email', ''),
+                    'company_name': data.get('company_name', ''),
+                    'status': 'queued',
+                }) + '\n')
+
+    elif log_type == 'market_report_complete':
+        mr_path = ECHO_MEMORY / 'market_report_requests.jsonl'
+        with open(mr_path, 'a') as f:
+            f.write(json.dumps({
+                'timestamp': entry['timestamp'],
+                'postcode': data.get('postcode', ''),
+                'city': data.get('city', ''),
+                'email': data.get('email', ''),
+                'qa_passed': data.get('qa_passed', 0),
+                'qa_total': data.get('qa_total', 0),
+                'status': 'complete',
+            }) + '\n')
 
 # ── API Routes ──
 

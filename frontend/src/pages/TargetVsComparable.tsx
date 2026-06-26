@@ -40,6 +40,8 @@ export default function TargetVsComparable() {
     setSubmitting(true);
     setFeedback(null);
 
+    const minLoadPromise = new Promise(r => setTimeout(r, 900));
+
     try {
       const params = new URLSearchParams();
       params.append('url', url.trim());
@@ -53,6 +55,7 @@ export default function TargetVsComparable() {
         body: params.toString(),
       });
       const data = await resp.json();
+      await minLoadPromise;
       if (data.success) {
         setSuccess(true);
         setFeedback({ type: 'success', message: 'Request received!' });
@@ -63,6 +66,7 @@ export default function TargetVsComparable() {
         });
       }
     } catch {
+      await minLoadPromise;
       setFeedback({ type: 'error', message: 'Connection error. Ensure the server is running.' });
     }
     setSubmitting(false);

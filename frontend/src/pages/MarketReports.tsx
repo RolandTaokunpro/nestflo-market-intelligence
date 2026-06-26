@@ -134,6 +134,8 @@ export default function MarketReports() {
     setSubmitting(true);
     setFeedback(null);
 
+    const minLoadPromise = new Promise(r => setTimeout(r, 900));
+
     try {
       // Mark all fields as touched for validation before submit
       setFirstNameTouched(true);
@@ -154,6 +156,7 @@ export default function MarketReports() {
         body,
       });
       const data = await resp.json();
+      await minLoadPromise;
       if (data.success) {
         setFeedback({ type: 'success', message: `Request received! We'll process ${selectedPostcodes.join(', ')} for ${city?.name} and email your reports to ${email.trim()}.` });
         resetForm();
@@ -162,6 +165,7 @@ export default function MarketReports() {
         setFeedback({ type: 'error', message: data.errors?.join(' ') || 'Submission failed. Please try again.' });
       }
     } catch {
+      await minLoadPromise;
       setFeedback({ type: 'error', message: 'Connection error. Please ensure the server is running.' });
     }
     setSubmitting(false);

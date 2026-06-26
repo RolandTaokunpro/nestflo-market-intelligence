@@ -36,8 +36,6 @@ ACTUAL_WORKSPACE = Path(__file__).resolve().parent.parent.parent  # ...openclaw/
 WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # ...openclaw/ (legacy)
 ECHO_MEMORY = ACTUAL_WORKSPACE / "memory" / "echo"
 LOG_DIR = Path(__file__).resolve().parent / "logs"
-LARK_WEBHOOK_URL = os.environ.get("LARK_WEBHOOK_URL", "")
-JESS_LARK_WEBHOOK_URL = os.environ.get("JESS_LARK_WEBHOOK_URL", "")
 
 app = FastAPI(title="Nestflo Pipeline Receiver", version="1.0.0")
 
@@ -134,109 +132,99 @@ def log_request(log_type: str, data: dict):
             }) + '\n')
 
 
-# ── Lark notification ──
+# ── Lark notification (via bot API, no webhook needed) ──
+
+LARK_ECHO_APP_ID = os.environ.get("FEISHU_ECHO_APP_ID", "cli_a97a58f2ef78deed")
+LARK_ECHO_APP_SECRET = os.environ.get("FEISHU_ECHO_APP_SECRET", "")
+LARK_JESS_APP_ID = os.environ.get("FEISHU_JESS_APP_ID", "cli_aab658f227f9dee6")
+LARK_JESS_APP_SECRET = os.environ.get("FEISHU_JESS_APP_SECRET", "")
+LARK_NOTIFY_RECIPIENT = os.environ.get("LARK_NOTIFY_RECIPIENT", "roland.tao@nestflo.com")
+LARK_APPROVAL_RECIPIENT = os.environ.get("LARK_APPROVAL_RECIPIENT", "roland.tao@nestflo.com")
+
+_lark_token_cache = {}
+
+def _lark_get_token(app_id: str, app_secret: str) -> str:
+    if app_id in _lark_token_cache:
+        return _lark_token_cache[app_id]
+    import requests
+    resp = requests.post(
+        "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal",
+        json={"app_id": app_id, "app_secret": app_secret},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("code") != 0:
+        raise Exception(f"Lark auth failed: {data}")
+    token = data["tenant_access_token"]
+    _lark_token_cache[app_id] = token
+    return token
+
+def _lark_send(recipient_email: str, title: str, body_text: str,
+               app_id: str, app_secret: str) -> bool:
+    """Send a Lark message via bot API. Returns True on success."""
+    if not app_secret:
+        print(f"⚠️  Lark app secret not set for {app_id} — skipping")
+        return False
+    import requests
+    try:
+        token = _lark_get_token(app_id, app_secret)
+        resp = requests.post(
+            "https://open.larksuite.com/open-apis/im/v1/messages",
+            params={"receive_id_type": "email"},
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "receive_id": recipient_email,
+                "msg_type": "post",
+                "content": json.dumps({
+                    "zh_cn": {
+                        "title": title,
+                        "content": [[{"tag": "text", "text": body_text}]],
+                    }
+                }),
+            },
+            timeout=10,
+        )
+        if resp.json().get("code") == 0:
+            print(f"✅ Lark sent ({app_id}): {title}")
+            return True
+        else:
+            print(f"⚠️  Lark send failed: {resp.json()}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Lark send error: {e}")
+        return False
+
 
 def notify_lark(product: str, customer_name: str, email: str,
                 company_name: str, detail: str, detail_label: str):
-    """Post a new-order notification to the Echo Lark channel via webhook."""
-    if not LARK_WEBHOOK_URL:
-        print("⚠️  LARK_WEBHOOK_URL not set — skipping Lark notification")
-        return
-
-    import requests
+    """Post a new-order notification via Echo Lark bot."""
     now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
-    body = {
-        "msg_type": "interactive",
-        "card": {
-            "header": {
-                "title": {"tag": "plain_text", "content": f"🆕 New {product} Order"},
-                "template": "indigo",
-            },
-            "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": (
-                            f"**Customer:** {customer_name}\n"
-                            f"**Company:** {company_name or '—'}\n"
-                            f"**Email:** {email}\n"
-                            f"**{detail_label}:** {detail}\n"
-                            f"**Time:** {now}"
-                        ),
-                    },
-                },
-                {"tag": "hr"},
-                {
-                    "tag": "note",
-                    "elements": [
-                        {"tag": "plain_text", "content": "Echo pipeline receiver — automated notification"}
-                    ],
-                },
-            ],
-        },
-    }
-
-    try:
-        resp = requests.post(LARK_WEBHOOK_URL, json=body, timeout=10)
-        if resp.status_code == 200:
-            print(f"✅ Lark notification sent for {product}: {customer_name}")
-        else:
-            print(f"⚠️  Lark webhook returned {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
-        print(f"⚠️  Lark notification failed: {e}")
+    title = f"🆕 New {product} Order"
+    body = (
+        f"Customer: {customer_name}\n"
+        f"Company: {company_name or '—'}\n"
+        f"Email: {email}\n"
+        f"{detail_label}: {detail}\n"
+        f"Time: {now}"
+    )
+    _lark_send(LARK_NOTIFY_RECIPIENT, title, body, LARK_ECHO_APP_ID, LARK_ECHO_APP_SECRET)
 
 
 def notify_jess_approval(product: str, customer_name: str, email: str,
                         postcode: str, detail: str):
-    """Post an approval-needed notification to Jess's Lark channel."""
-    if not JESS_LARK_WEBHOOK_URL:
-        print("⚠️  JESS_LARK_WEBHOOK_URL not set — skipping approval notification")
-        return
-
-    import requests
+    """Post an approval-needed notification via Jess Lark bot."""
     now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
-    body = {
-        "msg_type": "interactive",
-        "card": {
-            "header": {
-                "title": {"tag": "plain_text", "content": f"📋 {product} — Needs Approval"},
-                "template": "orange",
-            },
-            "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": (
-                            f"**Customer:** {customer_name}\n"
-                            f"**Email:** {email}\n"
-                            f"**Postcode:** {postcode}\n"
-                            f"**Detail:** {detail}\n"
-                            f"**Completed:** {now}\n\n"
-                            f"Report PDF is ready. Please review and approve."
-                        ),
-                    },
-                },
-                {"tag": "hr"},
-                {
-                    "tag": "note",
-                    "elements": [
-                        {"tag": "plain_text", "content": "Reply to approve — Echo will send to customer."}
-                    ],
-                },
-            ],
-        },
-    }
-
-    try:
-        resp = requests.post(JESS_LARK_WEBHOOK_URL, json=body, timeout=10)
-        if resp.status_code == 200:
-            print(f"✅ Jess approval notification sent for {product}: {customer_name}")
-        else:
-            print(f"⚠️  Jess webhook returned {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
-        print(f"⚠️  Jess notification failed: {e}")
+    title = f"📋 {product} — Needs Approval"
+    body = (
+        f"Customer: {customer_name}\n"
+        f"Email: {email}\n"
+        f"Postcode: {postcode}\n"
+        f"Detail: {detail}\n"
+        f"Completed: {now}\n\n"
+        f"Report PDF is ready. Please review and approve."
+    )
+    _lark_send(LARK_APPROVAL_RECIPIENT, title, body, LARK_JESS_APP_ID, LARK_JESS_APP_SECRET)
 
 # ── API Routes ──
 

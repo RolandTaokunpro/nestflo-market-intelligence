@@ -37,6 +37,7 @@ WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # ...openclaw/
 ECHO_MEMORY = ACTUAL_WORKSPACE / "memory" / "echo"
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LARK_WEBHOOK_URL = os.environ.get("LARK_WEBHOOK_URL", "")
+JESS_LARK_WEBHOOK_URL = os.environ.get("JESS_LARK_WEBHOOK_URL", "")
 
 app = FastAPI(title="Nestflo Pipeline Receiver", version="1.0.0")
 
@@ -185,6 +186,58 @@ def notify_lark(product: str, customer_name: str, email: str,
     except Exception as e:
         print(f"⚠️  Lark notification failed: {e}")
 
+
+def notify_jess_approval(product: str, customer_name: str, email: str,
+                        postcode: str, detail: str):
+    """Post an approval-needed notification to Jess's Lark channel."""
+    if not JESS_LARK_WEBHOOK_URL:
+        print("⚠️  JESS_LARK_WEBHOOK_URL not set — skipping approval notification")
+        return
+
+    import requests
+    now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
+    body = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": f"📋 {product} — Needs Approval"},
+                "template": "orange",
+            },
+            "elements": [
+                {
+                    "tag": "div",
+                    "text": {
+                        "tag": "lark_md",
+                        "content": (
+                            f"**Customer:** {customer_name}\n"
+                            f"**Email:** {email}\n"
+                            f"**Postcode:** {postcode}\n"
+                            f"**Detail:** {detail}\n"
+                            f"**Completed:** {now}\n\n"
+                            f"Report PDF is ready. Please review and approve."
+                        ),
+                    },
+                },
+                {"tag": "hr"},
+                {
+                    "tag": "note",
+                    "elements": [
+                        {"tag": "plain_text", "content": "Reply to approve — Echo will send to customer."}
+                    ],
+                },
+            ],
+        },
+    }
+
+    try:
+        resp = requests.post(JESS_LARK_WEBHOOK_URL, json=body, timeout=10)
+        if resp.status_code == 200:
+            print(f"✅ Jess approval notification sent for {product}: {customer_name}")
+        else:
+            print(f"⚠️  Jess webhook returned {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"⚠️  Jess notification failed: {e}")
+
 # ── API Routes ──
 
 @app.post("/api/pipeline/market-report")
@@ -234,6 +287,15 @@ async def receive_market_report(payload: MarketReportPayload, request: Request):
                     'qa_passed': qa_passed, 'qa_total': qa_total,
                 })
                 print(f"✅ Market report complete for {pc}, {payload.city} ({qa_passed}/{qa_total} QA)")
+
+                # Notify Jess for approval
+                notify_jess_approval(
+                    product="HMO Market Report",
+                    customer_name=customer_name,
+                    email=payload.email,
+                    postcode=pc,
+                    detail=f"{payload.city} · {qa_passed}/{qa_total} QA checks passed",
+                )
             except subprocess.TimeoutExpired:
                 print(f"❌ Pipeline timed out for {pc}")
             except Exception as e:
@@ -293,8 +355,17 @@ async def receive_target_vs_comparable(payload: TargetVsComparablePayload, reque
             })
             print(f"✅ Target vs Comparable complete for Ad {payload.ad_id}: {postcode} {room_type} £{rent} vs £{p50}")
 
+            # Notify Jess for approval
+            notify_jess_approval(
+                product="Target vs Comparable",
+                customer_name=customer_name,
+                email=payload.email,
+                postcode=postcode,
+                detail=f"Ad {payload.ad_id} · {room_type.strip()} · £{rent} vs Market P50 £{p50}",
+            )
+
             # Try to send approval email
-            report_dir = WORKSPACE / "memory" / "echo" / "reports" / "target_vs_comparable" / payload.ad_id
+            report_dir = ECHO_MEMORY / "reports" / "target_vs_comparable" / payload.ad_id
             pdfs = sorted(report_dir.glob("*.pdf"), key=lambda f: f.stat().st_mtime, reverse=True) if report_dir.exists() else []
             pdf_path = str(pdfs[0]) if pdfs else ""
 

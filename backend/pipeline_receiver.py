@@ -30,7 +30,18 @@ from pydantic import BaseModel
 
 # ── Config ──
 PORT = int(os.environ.get("PORT", "8899"))
-PIPELINE_API_KEY = os.environ.get("PIPELINE_API_KEY", "changeme")
+
+# Read API key from env var, or config file (avoids secret redaction in commands)
+def _load_api_key():
+    key = os.environ.get("PIPELINE_API_KEY", "")
+    if key and key != "changeme":
+        return key
+    config_path = Path.home() / ".nestflo" / "api-key"
+    if config_path.exists():
+        return config_path.read_text().strip()
+    return "changeme"
+
+PIPELINE_API_KEY = _load_api_key()
 AGENTS_DIR = Path(__file__).resolve().parent.parent.parent / "agents" / "echo"
 ACTUAL_WORKSPACE = Path(__file__).resolve().parent.parent.parent  # ...openclaw/workspace/
 WORKSPACE = Path(__file__).resolve().parent.parent.parent.parent  # ...openclaw/ (legacy)

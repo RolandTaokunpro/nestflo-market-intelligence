@@ -222,6 +222,50 @@ def notify_lark(product: str, customer_name: str, email: str,
     _lark_send(LARK_NOTIFY_RECIPIENT, title, body, LARK_ECHO_APP_ID, LARK_ECHO_APP_SECRET)
 
 
+def send_order_notification_email(product: str, listing_url: str,
+                                   first_name: str, last_name: str,
+                                   company_name: str, business_email: str) -> bool:
+    """Send an order notification email to hello@nestflo.ai (CC roland.tao@nestflo.com).
+
+    Called immediately when a new order is received so the team has a
+    durable record outside of Lark.
+
+    Returns True if the email was sent successfully.
+    """
+    now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
+    subject = f"🆕 New {product} Order — {first_name} {last_name} ({company_name or 'No company'})"
+    body = (
+        f"New {product} Order\n"
+        f"=====================\n\n"
+        f"Customer:    {first_name} {last_name}\n"
+        f"Company:     {company_name or '—'}\n"
+        f"Email:       {business_email}\n"
+        f"Listing URL: {listing_url}\n"
+        f"Received:    {now}\n\n"
+        f"— This is an automated notification from the Nestflo pipeline.\n"
+        f"  The report is being processed and will be ready for approval shortly.\n"
+    )
+
+    try:
+        result = subprocess.run([
+            'gog', 'gmail', 'send',
+            '--account', 'hello@kunpro.co.uk',
+            '--to', 'hello@nestflo.ai',
+            '--cc', 'roland.tao@nestflo.com',
+            '--subject', subject,
+            '--body', body,
+        ], capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"✅ Order notification email sent for {product}: {first_name} {last_name}")
+            return True
+        else:
+            print(f"⚠️  Order notification email failed: {result.stderr.strip()}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Order notification email error: {e}")
+        return False
+
+
 def notify_jess_approval(product: str, customer_name: str, email: str,
                         postcode: str, detail: str):
     """Post an approval-needed notification via Jess Lark bot."""
@@ -328,6 +372,16 @@ async def receive_target_vs_comparable(payload: TargetVsComparablePayload, reque
         company_name=payload.company_name,
         detail=f"Ad {payload.ad_id}",
         detail_label="Ad ID",
+    )
+
+    # Send order notification email to hello@nestflo.ai + CC roland.tao@nestflo.com
+    send_order_notification_email(
+        product="Target vs Comparable",
+        listing_url=payload.url,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        company_name=payload.company_name,
+        business_email=payload.email,
     )
 
     def run():

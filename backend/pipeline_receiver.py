@@ -222,25 +222,30 @@ def notify_lark(product: str, customer_name: str, email: str,
     _lark_send(LARK_NOTIFY_RECIPIENT, title, body, LARK_ECHO_APP_ID, LARK_ECHO_APP_SECRET)
 
 
-def send_order_notification_email(product: str, listing_url: str,
-                                   first_name: str, last_name: str,
-                                   company_name: str, business_email: str) -> bool:
+def send_order_notification_email(product: str, first_name: str, last_name: str,
+                                   company_name: str, business_email: str,
+                                   detail_lines: list[tuple[str, str]]) -> bool:
     """Send an order notification email to hello@nestflo.ai (CC roland.tao@nestflo.com).
 
     Called immediately when a new order is received so the team has a
     durable record outside of Lark.
 
+    detail_lines: list of (label, value) pairs for product-specific fields
+                  e.g. [("Listing URL", url)] or [("City", city), ("Postcodes", pcs)]
+
     Returns True if the email was sent successfully.
     """
     now = dt.datetime.now(dt.UTC).strftime('%Y-%m-%d %H:%M UTC')
     subject = f"🆕 New {product} Order — {first_name} {last_name} ({company_name or 'No company'})"
+
+    detail_str = "\n".join(f"{label}:{' ' * (13 - len(label))}{value}" for label, value in detail_lines)
     body = (
         f"New {product} Order\n"
         f"=====================\n\n"
         f"Customer:    {first_name} {last_name}\n"
         f"Company:     {company_name or '—'}\n"
         f"Email:       {business_email}\n"
-        f"Listing URL: {listing_url}\n"
+        f"{detail_str}\n"
         f"Received:    {now}\n\n"
         f"— This is an automated notification from the Nestflo pipeline.\n"
         f"  The report is being processed and will be ready for approval shortly.\n"
@@ -306,6 +311,19 @@ async def receive_market_report(payload: MarketReportPayload, request: Request):
         company_name=payload.company_name,
         detail=", ".join(unique_pcs),
         detail_label="Postcodes",
+    )
+
+    # Send order notification email to hello@nestflo.ai + CC roland.tao@nestflo.com
+    send_order_notification_email(
+        product="HMO Market Report",
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        company_name=payload.company_name,
+        business_email=payload.email,
+        detail_lines=[
+            ("City", payload.city),
+            ("Postcodes", ", ".join(unique_pcs)),
+        ],
     )
 
     def run():
@@ -377,11 +395,14 @@ async def receive_target_vs_comparable(payload: TargetVsComparablePayload, reque
     # Send order notification email to hello@nestflo.ai + CC roland.tao@nestflo.com
     send_order_notification_email(
         product="Target vs Comparable",
-        listing_url=payload.url,
         first_name=payload.first_name,
         last_name=payload.last_name,
         company_name=payload.company_name,
         business_email=payload.email,
+        detail_lines=[
+            ("Ad ID", payload.ad_id),
+            ("Listing URL", payload.url),
+        ],
     )
 
     def run():

@@ -295,7 +295,69 @@ async def api_market_report(req: MarketReportRequest):
     })
 
     if forwarded:
+        # Send order notification email
+        timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        send_order_email(
+            to_email="hello@nestflo.ai",
+            cc_email="roland.tao@nestflo.com",
+            subject=f"🔔 New HMO Market Report Order — {customer_name} | {safe_company or 'No company'}",
+            body=f"""New HMO Market Report Order
+==========================
+
+CUSTOMER DETAILS
+  Name:     {customer_name}
+  Company:  {safe_company or '—'}
+  Email:    {req.email}
+
+ORDER DETAILS
+  City:     {req.city}
+  Postcodes: {', '.join(unique_pcs)}
+  Count:    {len(unique_pcs)} district(s)
+
+ORDER INFO
+  Received: {timestamp}
+  Product:  Enhanced HMO Evidence Pack
+  Forwarded: ✅ to Mac mini
+
+Echo will process: echo_orchestrator.py for each postcode.
+Reports will be archived to Drive after Jess approval.
+
+— Nestflo Market Intelligence (automated)
+"""
+        )
         return {"success": True, "message": f"Request forwarded. {len(unique_pcs)} postcode(s) queued for {req.city}."}
+
+    # Forward failed — send notification email anyway
+    print(f"⚠️  Forward failed: {fwd_msg}")
+    timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    send_order_email(
+        to_email="hello@nestflo.ai",
+        cc_email="roland.tao@nestflo.com",
+        subject=f"🔔 New HMO Market Report Order — {customer_name} | {safe_company or 'No company'}",
+        body=f"""New HMO Market Report Order (Mac mini unreachable)
+===============================================
+
+CUSTOMER DETAILS
+  Name:     {customer_name}
+  Company:  {safe_company or '—'}
+  Email:    {req.email}
+
+ORDER DETAILS
+  City:     {req.city}
+  Postcodes: {', '.join(unique_pcs)}
+  Count:    {len(unique_pcs)} district(s)
+
+ORDER INFO
+  Received: {timestamp}
+  Product:  Enhanced HMO Evidence Pack
+  Forwarded: ❌ Failed — {fwd_msg}
+
+⚠️  MANUAL PROCESSING REQUIRED — please run:
+  python3 echo_orchestrator.py --postcode <PC> for each postcode
+
+— Nestflo Market Intelligence (automated)
+"""
+    )
 
     # Fallback: run locally (only works when this server is on the Mac mini)
     def run_market_report_pipeline():

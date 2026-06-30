@@ -10,11 +10,14 @@ In development, Vite dev server proxies /api calls here (port 8898).
 import json
 import os
 import re
+import smtplib
 import subprocess
 import sys
 import threading
 import urllib.parse
 import datetime as dt
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -27,6 +30,11 @@ from pydantic import BaseModel, EmailStr
 PORT = int(os.environ.get("PORT", "8898"))
 PIPELINE_BACKEND_URL = os.environ.get("PIPELINE_BACKEND_URL", "").rstrip('/')
 PIPELINE_API_KEY = os.environ.get("PIPELINE_API_KEY", "")
+# SMTP for order notifications (Gmail SMTP with app password)
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
 AGENTS_DIR = Path(__file__).resolve().parent.parent / ".."  # agents/echo/
 WORKSPACE = AGENTS_DIR.parent.parent  # openclaw/workspace/
 LOG_DIR = Path(__file__).resolve().parent / "logs"
@@ -211,6 +219,30 @@ def forward_to_macmini(endpoint: str, payload: dict) -> tuple[bool, str]:
     print(f"⚠️  {msg}")
     return False, msg
 
+
+def send_order_email(to_email: str, cc_email: str, subject: str, body: str) -> bool:
+    """Send order notification email via SMTP. Returns True on success."""
+    if not SMTP_USER or not SMTP_PASS:
+        print("⚠️  SMTP not configured — skipping email notification")
+        return False
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = to_email
+        msg['Cc'] = cc_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+        all_recipients = [to_email] + [cc_email]
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, all_recipients, msg.as_string())
+        print(f"✅ Order notification emailed to {to_email} (CC {cc_email})")
+        return True
+    except Exception as e:
+        print(f"❌ Email notification failed: {e}")
+        return False
+
+
 # ── API Routes ──
 
 @app.post("/api/market-report")
@@ -365,10 +397,67 @@ async def api_target_vs_comparable(request: Request):
     })
 
     if forwarded:
-        return {"success": True, "message": "Request forwarded. Processing."}
+        # Send order notification email
+        timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        send_order_email(
+            to_email="hello@nestflo.ai",
+            cc_email="roland.tao@nestflo.com",
+            subject=f"🔔 New Target vs Comparable Order — {customer_name} | {safe_company or 'No company'}",
+            body=f"""New Target vs Comparable Order
+==============================
 
-    # Forward failed — report the error so we can debug
+CUSTOMER DETAILS
+  Name:     {customer_name}
+  Company:  {safe_company or '—'}
+  Email:    {email}
+
+LISTING
+  URL:      {url}
+  Ad ID:    {ad_id}
+
+ORDER INFO
+  Received: {timestamp}
+  Product:  Target vs Comparable
+  Forwarded: ✅ to Mac mini
+
+Echo will process: target_vs_comparable_orchestrator.py --url "{url}"
+Report will be archived to Drive after Jess approval.
+
+— Nestflo Market Intelligence (automated)
+"""
+        )
+        return {"success": True, "message": "Request received. Processing."}
+
+    # Forward failed — send notification email anyway
     print(f"⚠️  Forward failed: {fwd_msg}")
+    timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    send_order_email(
+        to_email="hello@nestflo.ai",
+        cc_email="roland.tao@nestflo.com",
+        subject=f"🔔 New Target vs Comparable Order — {customer_name} | {safe_company or 'No company'}",
+        body=f"""New Target vs Comparable Order (Mac mini unreachable)
+===================================================
+
+CUSTOMER DETAILS
+  Name:     {customer_name}
+  Company:  {safe_company or '—'}
+  Email:    {email}
+
+LISTING
+  URL:      {url}
+  Ad ID:    {ad_id}
+
+ORDER INFO
+  Received: {timestamp}
+  Product:  Target vs Comparable
+  Forwarded: ❌ Failed — {fwd_msg}
+
+⚠️  MANUAL PROCESSING REQUIRED — please run:
+  python3 target_vs_comparable_orchestrator.py --url "{url}"
+
+— Nestflo Market Intelligence (automated)
+"""
+    )
 
     # Fallback: run locally (only works when this server is on the Mac mini)
     def run_pipeline():
@@ -473,18 +562,13 @@ async def api_contact(req: ContactRequest):
         f"Message: {req.message or '(none)'}\n"
     )
 
-    try:
-        subprocess.run([
-            'gog', 'gmail', 'send',
-            '--account', 'hello@kunpro.co.uk',
-            '--to', 'roland.tao@nestflo.com',
-            '--subject', f'Enterprise Enquiry — {req.company} ({req.name})',
-            '--body', body_text,
-        ], capture_output=True, text=True, timeout=30)
-        return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
-    except Exception as e:
-        print(f"Contact email failed: {e}")
-        return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
+    send_order_email(
+        to_email="hello@nestflo.ai",
+        cc_email="roland.tao@nestflo.com",
+        subject=f'Enterprise Enquiry — {req.company} ({req.name})',
+        body=body_text,
+    )
+    return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
 
 
 # ── Serve React SPA (production) ──

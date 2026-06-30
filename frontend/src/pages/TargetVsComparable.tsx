@@ -80,12 +80,12 @@ export default function TargetVsComparable() {
         <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">✓</div>
         <h2 className="text-xl font-bold text-white mb-2">Request Received</h2>
         <p className="text-sm text-brand-grey mb-1">Thank you, <strong>{firstName} {lastName}</strong>.</p>
-        <p className="text-sm text-brand-grey mb-6">Your report will arrive at <strong>{email}</strong> within one hour.</p>
+        <p className="text-sm text-brand-grey mb-6">Your order has been forwarded. Your report will be emailed to <strong>{email}</strong> after review — typically within 1 business day.</p>
         <div className="text-left max-w-xs mx-auto space-y-2 text-xs text-brand-grey">
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Validating SpareRoom listing</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Crawling market comparables</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Running analysis & QA checks</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Sending to your email</div>
+          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green rounded-full flex-shrink-0" /> Order received</div>
+          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green rounded-full flex-shrink-0" /> Details forwarded to Nestflo</div>
+          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Processing & quality review</div>
+          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-brand-grey rounded-full flex-shrink-0" /> Report delivery to your inbox</div>
         </div>
       </div>
     );
@@ -266,7 +266,7 @@ export default function TargetVsComparable() {
           {submitting ? 'Processing…' : 'Create Report'}
         </button>
         <p className="text-xs text-brand-grey text-center">
-          By clicking <strong>Create</strong>, our analysis engine <span className="text-orange font-semibold">Echo</span> will process your request. You will receive your report within one hour.
+          By clicking <strong>Create</strong>, our analysis engine <span className="text-orange font-semibold">Echo</span> will process your request. You will receive your report after review — typically within 1 business day.
         </p>
       </form>
 

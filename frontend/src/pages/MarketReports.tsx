@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { CITIES, validatePostcode, getCityByPostcode, sortCities } from '../data/cities';
 import { isBusinessEmail } from '../constants';
+import SuccessModal from '../components/SuccessModal';
 
 const MAX_POSTCODES = 3;
 const SORTED_CITIES = sortCities(CITIES);
@@ -27,6 +28,8 @@ export default function MarketReports() {
   const [companyNameTouched, setCompanyNameTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const nextId = useRef(2);
 
   const city = useMemo(() => SORTED_CITIES.find(c => c.prefix === selectedCity), [selectedCity]);
@@ -158,7 +161,9 @@ export default function MarketReports() {
       const data = await resp.json();
       await minLoadPromise;
       if (data.success) {
-        setFeedback({ type: 'success', message: `Request received! We'll process ${selectedPostcodes.join(', ')} for ${city?.name} and email your reports to ${email.trim()}.` });
+        const msg = `We'll process ${selectedPostcodes.join(', ')} for ${city?.name} and email your reports to ${email.trim()}.`;
+        setSuccessMessage(msg);
+        setShowSuccessModal(true);
         resetForm();
         setSelectedCity('');
       } else {
@@ -210,18 +215,20 @@ export default function MarketReports() {
         </div>
       </div>
 
-      {feedback && (
+      {feedback && feedback.type === 'error' && (
         <div
           role="alert"
-          className={`mb-6 p-4 rounded-lg text-sm ${
-            feedback.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-800'
-              : 'bg-red-50 border border-red-200 text-red-800'
-          }`}
+          className="mb-6 p-4 rounded-lg text-sm bg-red-50 border border-red-200 text-red-800"
         >
           {feedback.message}
         </div>
       )}
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        message={successMessage}
+      />
 
       <form onSubmit={handleSubmit} noValidate className="bg-navy-light rounded-xl border border-white/8 p-6 sm:p-8 space-y-6">
         {/* City */}

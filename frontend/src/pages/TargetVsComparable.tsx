@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { isBusinessEmail } from '../constants';
+import SuccessModal from '../components/SuccessModal';
 
 // Backend URL — points to your Mac mini via cloudflare tunnel
 export default function TargetVsComparable() {
@@ -10,7 +11,8 @@ export default function TargetVsComparable() {
   const [companyName, setCompanyName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
@@ -57,8 +59,9 @@ export default function TargetVsComparable() {
       const data = await resp.json();
       await minLoadPromise;
       if (data.success) {
-        setSuccess(true);
-        setFeedback({ type: 'success', message: 'Request received!' });
+        const msg = `Thank you, ${firstName.trim()} ${lastName.trim()}. Your order has been forwarded. Your report will be emailed to ${email.trim()} after review — typically within 1 business day.`;
+        setSuccessMessage(msg);
+        setShowSuccessModal(true);
       } else {
         setFeedback({
           type: 'error',
@@ -73,23 +76,6 @@ export default function TargetVsComparable() {
   };
 
   const mark = (field: string) => () => setTouched(prev => ({ ...prev, [field]: true }));
-
-  if (success) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">✓</div>
-        <h2 className="text-xl font-bold text-white mb-2">Request Received</h2>
-        <p className="text-sm text-brand-grey mb-1">Thank you, <strong>{firstName} {lastName}</strong>.</p>
-        <p className="text-sm text-brand-grey mb-6">Your order has been forwarded. Your report will be emailed to <strong>{email}</strong> after review — typically within 1 business day.</p>
-        <div className="text-left max-w-xs mx-auto space-y-2 text-xs text-brand-grey">
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green rounded-full flex-shrink-0" /> Order received</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green rounded-full flex-shrink-0" /> Details forwarded to Nestflo</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-orange rounded-full flex-shrink-0" /> Processing & quality review</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-brand-grey rounded-full flex-shrink-0" /> Report delivery to your inbox</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-lg mx-auto px-4 py-12 sm:py-16">
@@ -132,13 +118,11 @@ export default function TargetVsComparable() {
         </div>
       </div>
 
-      {feedback && (
+      {feedback && feedback.type !== 'success' && (
         <div
           role="alert"
           className={`mb-6 p-4 rounded-lg text-sm ${
-            feedback.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-800'
-              : feedback.type === 'info'
+            feedback.type === 'info'
               ? 'bg-blue-50 border border-blue-200 text-blue-800'
               : 'bg-red-50 border border-red-200 text-red-800'
           }`}
@@ -146,6 +130,12 @@ export default function TargetVsComparable() {
           {feedback.message}
         </div>
       )}
+
+      <SuccessModal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        message={successMessage}
+      />
 
       <form onSubmit={handleSubmit} noValidate className="bg-navy-light rounded-xl border border-white/8 p-6 sm:p-8 space-y-5">
         {/* URL */}

@@ -399,9 +399,15 @@ ORDER INFO
             print(f"❌ Market report pipeline error: {e}")
             import traceback; traceback.print_exc()
 
-    threading.Thread(target=run_market_report_pipeline, daemon=True).start()
-
-    return {"success": True, "message": f"Request received. {len(unique_pcs)} postcode(s) queued for {req.city}. (Forward: {fwd_msg})"}
+    # Forward failed — return error so the user sees a failure message
+    # instead of a fake success. Only attempt local fallback in dev.
+    return JSONResponse(
+        status_code=503,
+        content={"success": False, "errors": [
+            "Our processing system is temporarily unavailable. "
+            "Please try again later or contact support at hello@nestflo.ai."
+        ]},
+    )
 
 
 @app.post("/api/target-vs-comparable")
@@ -591,8 +597,14 @@ ORDER INFO
             print(f"❌ Pipeline error for Ad {ad_id}: {e}")
             import traceback; traceback.print_exc()
 
-    threading.Thread(target=run_pipeline, daemon=True).start()
-    return {"success": True, "message": f"Request received. Processing. (Forward: {fwd_msg})"}
+    # Forward failed — return error so the user sees a failure message
+    return JSONResponse(
+        status_code=503,
+        content={"success": False, "errors": [
+            "Our processing system is temporarily unavailable. "
+            "Please try again later or contact support at hello@nestflo.ai."
+        ]},
+    )
 
 
 @app.post("/api/subscribe")

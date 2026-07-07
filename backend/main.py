@@ -645,6 +645,123 @@ async def api_contact(req: ContactRequest):
     return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
 
 
+# ── Chatbot Proxy (forward to pipeline receiver → local chatbot) ──
+
+import requests
+
+
+@app.get("/widget.js")
+async def serve_widget():
+    """Serve the HMO Intelligence chatbot widget JS."""
+    widget_path = DIST_DIR / "widget.js"
+    if not widget_path.exists():
+        # Fallback: try frontend public directory
+        widget_path = Path(__file__).resolve().parent.parent / "frontend" / "public" / "widget.js"
+    if widget_path.exists():
+        return FileResponse(widget_path, media_type="application/javascript")
+    # Last resort: proxy from chatbot
+    try:
+        resp = requests.get(f"{PIPELINE_BACKEND_URL}/widget.js", timeout=10)
+        return JSONResponse(content=resp.json() if resp.headers.get("content-type","").startswith("application/json") else resp.text,
+                            media_type=resp.headers.get("content-type", "application/javascript"))
+    except Exception as e:
+        print(f"⚠️  widget.js serve failed: {e}")
+        raise HTTPException(404, "widget.js not found")
+
+
+@app.post("/api/chat")
+async def proxy_chat(request: Request):
+    """Proxy chat message to chatbot via pipeline receiver."""
+    body = await request.json()
+    if not PIPELINE_BACKEND_URL:
+        return JSONResponse({"error": "Pipeline backend not configured"}, status_code=503)
+    try:
+        resp = requests.post(
+            f"{PIPELINE_BACKEND_URL}/api/chat",
+            json=body,
+            headers={"X-API-Key": PIPELINE_API_KEY},
+            timeout=30
+        )
+        return resp.json()
+    except requests.RequestException as e:
+        print(f"⚠️  Chatbot proxy /api/chat failed: {e}")
+        return JSONResponse({"error": "Chatbot temporarily unavailable"}, status_code=502)
+
+
+@app.post("/api/response")
+async def proxy_response(request: Request):
+    """Proxy assistant response to chatbot via pipeline receiver."""
+    body = await request.json()
+    if not PIPELINE_BACKEND_URL:
+        return JSONResponse({"error": "Pipeline backend not configured"}, status_code=503)
+    try:
+        resp = requests.post(
+            f"{PIPELINE_BACKEND_URL}/api/response",
+            json=body,
+            headers={"X-API-Key": PIPELINE_API_KEY},
+            timeout=30
+        )
+        return resp.json()
+    except requests.RequestException as e:
+        print(f"⚠️  Chatbot proxy /api/response failed: {e}")
+        return JSONResponse({"error": "Chatbot temporarily unavailable"}, status_code=502)
+
+
+@app.get("/api/chat/{session_id}")
+async def proxy_poll(session_id: str, request: Request):
+    """Proxy poll for messages to chatbot via pipeline receiver."""
+    if not PIPELINE_BACKEND_URL:
+        return JSONResponse({"error": "Pipeline backend not configured"}, status_code=503)
+    since = request.query_params.get("since", "0")
+    try:
+        resp = requests.get(
+            f"{PIPELINE_BACKEND_URL}/api/chat/{session_id}",
+            params={"since": since},
+            headers={"X-API-Key": PIPELINE_API_KEY},
+            timeout=30
+        )
+        return resp.json()
+    except requests.RequestException as e:
+        print(f"⚠️  Chatbot proxy /api/chat/{session_id} failed: {e}")
+        return JSONResponse({"error": "Chatbot temporarily unavailable"}, status_code=502)
+
+
+@app.get("/api/pending")
+async def proxy_pending():
+    """Proxy pending messages request to chatbot via pipeline receiver."""
+    if not PIPELINE_BACKEND_URL:
+        return JSONResponse({"error": "Pipeline backend not configured"}, status_code=503)
+    try:
+        resp = requests.get(
+            f"{PIPELINE_BACKEND_URL}/api/pending",
+            headers={"X-API-Key": PIPELINE_API_KEY},
+            timeout=30
+        )
+        return resp.json()
+    except requests.RequestException as e:
+        print(f"⚠️  Chatbot proxy /api/pending failed: {e}")
+        return JSONResponse({"error": "Chatbot temporarily unavailable"}, status_code=502)
+
+
+@app.get("/api/new-leads")
+async def proxy_leads(request: Request):
+    """Proxy new leads request to chatbot via pipeline receiver."""
+    if not PIPELINE_BACKEND_URL:
+        return JSONResponse({"error": "Pipeline backend not configured"}, status_code=503)
+    since = request.query_params.get("since", "0")
+    try:
+        resp = requests.get(
+            f"{PIPELINE_BACKEND_URL}/api/new-leads",
+            params={"since": since},
+            headers={"X-API-Key": PIPELINE_API_KEY},
+            timeout=30
+        )
+        return resp.json()
+    except requests.RequestException as e:
+        print(f"⚠️  Chatbot proxy /api/new-leads failed: {e}")
+        return JSONResponse({"error": "Chatbot temporarily unavailable"}, status_code=502)
+
+
 # ── Serve React SPA (production) ──
 
 if IS_PROD:

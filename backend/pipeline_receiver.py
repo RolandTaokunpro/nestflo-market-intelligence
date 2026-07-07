@@ -482,6 +482,84 @@ async def receive_target_vs_comparable(payload: TargetVsComparablePayload, reque
 async def health():
     return {"status": "ok", "timestamp": dt.datetime.utcnow().isoformat()}
 
+
+# ── Chatbot Proxy (forward to local chatbot on port 3100) ──
+
+CHATBOT_BASE = "http://localhost:3100"
+
+
+@app.post("/api/chat")
+async def proxy_chat(request: Request):
+    """Proxy new chat message to HMO Intelligence chatbot."""
+    body = await request.json()
+    import requests
+    try:
+        resp = requests.post(f"{CHATBOT_BASE}/api/chat", json=body, timeout=30)
+        return resp.json()
+    except Exception as e:
+        print(f"⚠️  Chatbot proxy /api/chat failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+@app.post("/api/response")
+async def proxy_response(request: Request):
+    """Proxy assistant response to HMO Intelligence chatbot."""
+    body = await request.json()
+    import requests
+    try:
+        resp = requests.post(f"{CHATBOT_BASE}/api/response", json=body, timeout=30)
+        return resp.json()
+    except Exception as e:
+        print(f"⚠️  Chatbot proxy /api/response failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+@app.get("/api/chat/{session_id}")
+async def proxy_poll(session_id: str, request: Request):
+    """Proxy poll for messages to HMO Intelligence chatbot."""
+    import requests
+    since = request.query_params.get("since", "0")
+    try:
+        resp = requests.get(
+            f"{CHATBOT_BASE}/api/chat/{session_id}",
+            params={"since": since},
+            timeout=30
+        )
+        return resp.json()
+    except Exception as e:
+        print(f"⚠️  Chatbot proxy /api/chat/{session_id} failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+@app.get("/api/pending")
+async def proxy_pending():
+    """Proxy pending messages request to HMO Intelligence chatbot."""
+    import requests
+    try:
+        resp = requests.get(f"{CHATBOT_BASE}/api/pending", timeout=30)
+        return resp.json()
+    except Exception as e:
+        print(f"⚠️  Chatbot proxy /api/pending failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+@app.get("/api/new-leads")
+async def proxy_leads(request: Request):
+    """Proxy new leads request to HMO Intelligence chatbot."""
+    import requests
+    since = request.query_params.get("since", "0")
+    try:
+        resp = requests.get(
+            f"{CHATBOT_BASE}/api/new-leads",
+            params={"since": since},
+            timeout=30
+        )
+        return resp.json()
+    except Exception as e:
+        print(f"⚠️  Chatbot proxy /api/new-leads failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
 # ── Main ──
 
 if __name__ == '__main__':

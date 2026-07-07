@@ -1,3 +1,3 @@
 #!/bin/bash
-# Wrapper for cloudflared tunnel — launched by launchctl
-exec /opt/homebrew/bin/cloudflared tunnel --url http://localhost:8899 >> /tmp/nestflo-tunnel.log 2>&1
+# Wrapper for bore tunnel — launched by launchctl
+exec /opt/homebrew/bin/bore local 8899 --to bore.pub --port 29093 >> /tmp/nestflo-tunnel.log 2>&1

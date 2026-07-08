@@ -311,7 +311,8 @@
 
     if (leadCapture) {
       addLeadCaptureField(leadCapture);
-    } else if (quickReplies && quickReplies.length > 0) {
+    }
+    if (quickReplies && quickReplies.length > 0) {
       addQuickReplies(quickReplies);
     }
 

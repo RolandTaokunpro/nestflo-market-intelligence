@@ -71,6 +71,14 @@ export default function Home() {
                 >
                   Benchmark a Listing
                 </Link>
+                <a
+                  href="https://calendar.app.google/KSQx4rG9L6ytS4je7"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block bg-white text-navy text-sm font-semibold px-8 py-4 rounded-xl hover:bg-brand-grey/90 transition-colors text-center border border-white/20"
+                >
+                  Book a Demo &rarr;
+                </a>
               </div>
               <p className="text-sm font-medium text-brand-cyan mt-4">
                 Free report, delivered by email. No credit card.
@@ -360,6 +368,14 @@ export default function Home() {
             >
               Benchmark a Listing
             </Link>
+            <a
+              href="https://calendar.app.google/KSQx4rG9L6ytS4je7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-white text-navy text-sm font-semibold px-8 py-4 rounded-xl hover:bg-brand-grey/90 transition-colors text-center border border-white/20"
+            >
+              Book a Demo &rarr;
+            </a>
           </div>
         </div>
       </section>

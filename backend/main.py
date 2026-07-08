@@ -645,28 +645,56 @@ async def api_contact(req: ContactRequest):
     return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
 
 
-# ── Chatbot Proxy (forward to pipeline receiver → local chatbot) ──
+# ── Chatbot (self-contained, no Mac mini dependency) ──
 
 import requests
+from chatbot import process_message, reset_session
+
+
+class ChatbotMessage(BaseModel):
+    sessionId: str = ""
+    message: str
 
 
 @app.get("/widget.js")
 async def serve_widget():
-    """Serve the HMO Intelligence chatbot widget JS."""
+    """Serve the HMO Intelligence chatbot widget JS from dist (Vite copies public/)."""
     widget_path = DIST_DIR / "widget.js"
     if not widget_path.exists():
-        # Fallback: try frontend public directory
         widget_path = Path(__file__).resolve().parent.parent / "frontend" / "public" / "widget.js"
     if widget_path.exists():
         return FileResponse(widget_path, media_type="application/javascript")
-    # Last resort: proxy from chatbot
-    try:
-        resp = requests.get(f"{PIPELINE_BACKEND_URL}/widget.js", timeout=10)
-        return JSONResponse(content=resp.json() if resp.headers.get("content-type","").startswith("application/json") else resp.text,
-                            media_type=resp.headers.get("content-type", "application/javascript"))
-    except Exception as e:
-        print(f"⚠️  widget.js serve failed: {e}")
-        raise HTTPException(404, "widget.js not found")
+    raise HTTPException(404, "widget.js not found")
+
+
+@app.post("/api/chatbot/init")
+async def chatbot_init():
+    """Initialize a new chatbot session and return welcome message."""
+    import uuid
+    sid = str(uuid.uuid4())
+    result = process_message(sid, "hello")
+    return JSONResponse(result)
+
+
+@app.post("/api/chatbot/message")
+async def chatbot_message(req: ChatbotMessage):
+    """Process a user message through the chatbot state machine."""
+    if not req.message.strip():
+        raise HTTPException(400, "Message required")
+    result = process_message(req.sessionId, req.message)
+    return JSONResponse(result)
+
+
+@app.post("/api/chatbot/reset")
+async def chatbot_reset(req: ChatbotMessage):
+    """Reset a chatbot session."""
+    if req.sessionId:
+        result = reset_session(req.sessionId)
+        return JSONResponse(result)
+    raise HTTPException(400, "sessionId required")
+
+
+# ── Chatbot Proxy (forward to pipeline receiver → local chatbot, legacy fallback) ──
 
 
 @app.post("/api/chat")

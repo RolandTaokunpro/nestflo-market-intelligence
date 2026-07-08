@@ -234,6 +234,8 @@
   const win = document.createElement('div');
   win.id = 'nf-chat-window';
   win.className = 'closed';
+  win.setAttribute('role', 'dialog');
+  win.setAttribute('aria-label', 'Nestflo assistant chat');
   win.innerHTML = `
     <div class="nf-header">
       <div class="nf-header-logo">HMI</div>
@@ -243,7 +245,7 @@
       </div>
       <button class="nf-header-close" aria-label="Close">✕</button>
     </div>
-    <div class="nf-messages" id="nf-messages"></div>
+    <div class="nf-messages" id="nf-messages" aria-live="polite"></div>
     <div class="nf-input-area">
       <div class="nf-input-row">
         <div class="nf-input-wrap">
@@ -354,6 +356,10 @@
       : capture.field === 'email' ? 'you@company.com'
       : 'Phone number (optional)...';
     input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        removeLeadCapture();
+        return;
+      }
       if (e.key === 'Enter' && input.value.trim()) {
         const val = input.value.trim();
         removeLeadCapture();

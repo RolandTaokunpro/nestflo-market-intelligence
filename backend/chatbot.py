@@ -93,7 +93,8 @@ def match_intent(text: str) -> str:
 # --- Response Builders ---
 
 def _r(sid: str, message: str, quick_replies: list = None, state: str = 'welcome',
-      lead_capture: dict = None, external_link: str = None, lead_captured: bool = False) -> dict:
+      lead_capture: dict = None, external_link: str = None, lead_captured: bool = False,
+      lead_details: dict = None) -> dict:
     return {
         'sessionId': sid,
         'message': message,
@@ -102,6 +103,7 @@ def _r(sid: str, message: str, quick_replies: list = None, state: str = 'welcome
         'leadCapture': lead_capture,
         'externalLink': external_link,
         'leadCaptured': lead_captured,
+        'leadDetails': lead_details,
     }
 
 
@@ -297,7 +299,12 @@ def process_message(sid: str, text: str) -> dict:
         ), [
             {'label': '📅 Book a Call', 'value': 'call'},
             {'label': '🔍 Explore Reports', 'value': 'unsure'},
-        ], state='bespoke_done', lead_captured=True, external_link=CALENDAR_LINK)
+        ], state='bespoke_done', lead_captured=True, external_link=CALENDAR_LINK,
+            lead_details={
+                'name': session['lead_name'],
+                'email': session['lead_email'],
+                'phone': session.get('lead_phone'),
+            })
 
     if state == 'bespoke_done':
         if intent == 'call':

@@ -678,10 +678,77 @@ async def chatbot_init():
 
 @app.post("/api/chatbot/message")
 async def chatbot_message(req: ChatbotMessage):
-    """Process a user message through the chatbot state machine."""
+    """Process a user message through the chatbot state machine.
+    When a lead is captured, forward to Talon and email Roland."""
     if not req.message.strip():
         raise HTTPException(400, "Message required")
     result = process_message(req.sessionId, req.message)
+
+    # If a lead was captured (bespoke flow completed), notify Talon + Roland
+    if result.get('leadCaptured') and result.get('leadDetails'):
+        lead = result['leadDetails']
+        name = lead.get('name', 'Unknown')
+        email = lead.get('email', '')
+        phone = lead.get('phone', '')
+        timestamp = dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+        # 1. Forward lead to Talon's pending queue (best-effort via pipeline receiver)
+        if PIPELINE_BACKEND_URL:
+            try:
+                talon_msg = (
+                    f"📋 **New Chatbot Lead Captured**\n\n"
+                    f"Name: {name}\n"
+                    f"Email: {email}\n"
+                    f"Phone: {phone or '—'}\n"
+                    f"Source: HMO Market Intelligence chatbot\n"
+                    f"Time: {timestamp}\n\n"
+                    f"Roland — a prospect filled in the bespoke report form. "
+                    f"Please follow up via email or phone."
+                )
+                resp = requests.post(
+                    f"{PIPELINE_BACKEND_URL}/api/chat",
+                    json={
+                        'sessionId': f"lead-{req.sessionId}",
+                        'message': talon_msg,
+                        'name': name,
+                        'email': email,
+                        'phone': phone,
+                    },
+                    headers={"X-API-Key": PIPELINE_API_KEY},
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    print(f"✅ Lead forwarded to Talon: {name} <{email}>")
+                else:
+                    print(f"⚠️  Talon forward returned {resp.status_code}: {resp.text[:100]}")
+            except Exception as e:
+                print(f"⚠️  Talon forward failed: {e}")
+
+        # 2. Email notification to Roland
+        phone_str = f"Phone: {phone}" if phone else "Phone: (not provided)"
+        email_body = (
+            f"📋 New Chatbot Lead Captured\n"
+            f"{'=' * 40}\n\n"
+            f"LEAD DETAILS\n"
+            f"  Name:  {name}\n"
+            f"  Email: {email}\n"
+            f"  {phone_str}\n\n"
+            f"SOURCE\n"
+            f"  Channel: HMO Market Intelligence chatbot\n"
+            f"  Session: {req.sessionId}\n"
+            f"  Time:    {timestamp}\n\n"
+            f"ACTION REQUIRED\n"
+            f"  A prospect requested a bespoke report. Follow up via "
+            f"email or phone to discuss their requirements.\n\n"
+            f"— Nestflo Market Intelligence (automated)"
+        )
+        send_order_email(
+            to_email="hello@nestflo.ai",
+            cc_email="roland.tao@nestflo.com",
+            subject=f"📋 New Chatbot Lead — {name}",
+            body=email_body,
+        )
+
     return JSONResponse(result)
 
 

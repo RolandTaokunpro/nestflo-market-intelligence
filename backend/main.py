@@ -11,6 +11,7 @@ import json
 import os
 import re
 import smtplib
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -40,6 +41,16 @@ WORKSPACE = AGENTS_DIR.parent.parent  # openclaw/workspace/
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 DIST_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 IS_PROD = DIST_DIR.exists()
+
+# Rent Benchmarks API config (see backend/rent_benchmarks_etl.py, spec at
+# t_16c7d0ef/spec.md). DB is a committed build artifact baked into the Docker
+# image — never written to at runtime, so Render disk persistence is not a
+# concern for this feature (ADR-1 trade-off resolved by NOT depending on
+# writable disk at all).
+RENT_DB_PATH = Path(__file__).resolve().parent / "data" / "rent_benchmarks.db"
+RENT_API_KEYS = set(k.strip() for k in os.environ.get("RENT_API_KEYS", "").split(",") if k.strip())
+RENT_API_RATE_LIMIT = int(os.environ.get("RENT_API_RATE_LIMIT", "60"))  # requests/min/key
+ROOM_TYPES = ["single", "double", "double_ensuite", "studio"]
 
 app = FastAPI(title="Nestflo Market Intelligence API", version="1.0.0")
 
@@ -83,7 +94,13 @@ def _get_client_ip(request: Request) -> str:
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    if request.url.path.startswith("/api/") and request.method != "OPTIONS":
+    # /api/rent-benchmarks/* has its own per-API-key sliding window (AC 21,
+    # see check_rent_rate_limit below) sized for partner/programmatic traffic
+    # (60 req/min/key, configurable via RENT_API_RATE_LIMIT). The global
+    # 10 req/60s-per-IP limiter below is tuned for the public order-intake
+    # forms and would silently override the partner-API contract for anyone
+    # calling from a single IP — exempted here so the two limiters don't stack.
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/rent-benchmarks/") and request.method != "OPTIONS":
         now = dt.datetime.utcnow().timestamp()
         client_ip = _get_client_ip(request)
         timestamps = RATE_LIMIT.get(client_ip, [])
@@ -643,6 +660,213 @@ async def api_contact(req: ContactRequest):
         body=body_text,
     )
     return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
+
+
+# ── Rent Benchmarks API ──
+# Spec: t_16c7d0ef/spec.md. Data: backend/rent_benchmarks_etl.py (run offline,
+# DB committed to git — see Dockerfile, this endpoint never writes to disk).
+
+RENT_RATE_LIMIT: dict[str, list[float]] = {}
+
+
+def verify_rent_api_key(request: Request) -> str:
+    """Reuses the X-API-Key pattern from pipeline_receiver.py verify_api_key().
+    Fails closed: if RENT_API_KEYS is unconfigured (empty), every request is
+    rejected rather than silently allowed through — safer default until
+    Roland provisions a key (spec §7-8, auth model pending sign-off)."""
+    key = request.headers.get("X-API-Key", "")
+    if not key or not RENT_API_KEYS or key not in RENT_API_KEYS:
+        raise HTTPException(403, "Invalid or missing API key")
+    return key
+
+
+def check_rent_rate_limit(api_key: str):
+    """Sliding-window rate limit scoped per API key (not per IP), mirroring
+    the pattern in the global `rate_limit` middleware above but keyed
+    differently per spec AC 21."""
+    now = dt.datetime.utcnow().timestamp()
+    timestamps = RENT_RATE_LIMIT.get(api_key, [])
+    timestamps = [t for t in timestamps if now - t < 60]
+    if len(timestamps) >= RENT_API_RATE_LIMIT:
+        raise HTTPException(429, "Too many requests. Please wait before trying again.")
+    timestamps.append(now)
+    RENT_RATE_LIMIT[api_key] = timestamps
+
+
+def _rent_db():
+    if not RENT_DB_PATH.exists():
+        raise HTTPException(503, "Rent benchmarks data not available. Run the ETL and redeploy.")
+    conn = sqlite3.connect(str(RENT_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _tier_confidence(tier: str) -> str:
+    return {"large": "high", "medium": "medium", "thin": "low", "zero": "none"}.get(tier, "none")
+
+
+# Tiers ranked worst→best for picking the district-level "best available" tier
+_TIER_RANK = {"zero": 0, "thin": 1, "medium": 2, "large": 3}
+
+
+def _room_type_payload(row: sqlite3.Row | None, room_type: str, include_bills: str | None,
+                        include_comparables: bool) -> dict:
+    if row is None:
+        # No row at all for this district/room_type combo — treat as zero-tier,
+        # never fabricate (AC 6, AC 12).
+        return {"room_type": room_type, "listings": 0, "data_tier": "zero",
+                "confidence": "none", "message": "No data available for this room type."}
+
+    tier = row["data_tier"]
+    entry: dict = {
+        "room_type": room_type,
+        "listings": row["total_listings"] or 0,
+        "data_tier": tier,
+        "confidence": _tier_confidence(tier),
+    }
+
+    if tier == "zero":
+        entry["message"] = "No listings found for this room type."
+        return entry
+
+    if tier == "thin":
+        rents = json.loads(row["thin_listing_rents_json"]) if row["thin_listing_rents_json"] else []
+        entry["note"] = "Sample size insufficient for a statistical benchmark — individual listing rents shown for reference only."
+        entry["listing_rents"] = rents
+        return entry
+
+    # medium or large
+    if row["p50"] is not None:
+        entry["p50"] = row["p50"]
+    if tier == "large":
+        # AC 9/14: p25/p75 only ever populated for large tier (>=8 listings)
+        if row["p25"] is not None:
+            entry["p25"] = row["p25"]
+        if row["p75"] is not None:
+            entry["p75"] = row["p75"]
+    # AC 10: medium tier must NOT include p25/p75 keys at all, even as null.
+    if row["mean"] is not None:
+        entry["mean"] = row["mean"]
+    if row["min_rent"] is not None:
+        entry["min"] = row["min_rent"]
+    if row["max_rent"] is not None:
+        entry["max"] = row["max_rent"]
+
+    # AC 15: bills split always as two separate sub-objects, never blended.
+    bills_inc = None
+    if row["bills_included_count"]:
+        bills_inc = {"count": row["bills_included_count"], "mean": row["bills_included_mean"]}
+    bills_exc = None
+    if row["bills_excluded_count"]:
+        bills_exc = {"count": row["bills_excluded_count"], "mean": row["bills_excluded_mean"]}
+
+    if include_bills in (None, "included") and bills_inc:
+        entry["bills_included"] = bills_inc
+    if include_bills in (None, "excluded") and bills_exc:
+        entry["bills_excluded"] = bills_exc
+
+    if include_comparables and row["comparables_json"]:
+        entry["comparables"] = json.loads(row["comparables_json"])[:5]
+
+    return entry
+
+
+@app.get("/api/rent-benchmarks/{postcode_district}")
+async def api_rent_benchmarks(
+    postcode_district: str,
+    request: Request,
+    room_type: str | None = None,
+    bills: str | None = None,
+    include_comparables: bool = False,
+):
+    """GET rent benchmarks for a UK postcode district. See spec.md (task
+    t_16c7d0ef) for the full 21 acceptance criteria this implements."""
+    api_key = verify_rent_api_key(request)
+    check_rent_rate_limit(api_key)
+
+    pc = postcode_district.strip().upper()
+    if not validate_uk_postcode(pc):
+        raise HTTPException(400, f"Invalid UK postcode district: {postcode_district}")
+
+    if room_type is not None and room_type not in ROOM_TYPES:
+        raise HTTPException(400, f"Invalid room_type. Must be one of: {', '.join(ROOM_TYPES)}")
+    if bills is not None and bills not in ("included", "excluded"):
+        raise HTTPException(400, "Invalid bills filter. Must be 'included' or 'excluded'.")
+
+    wanted_types = [room_type] if room_type else ROOM_TYPES
+
+    conn = _rent_db()
+    try:
+        # Latest month per room_type for this district (v1: schema is
+        # time-series-ready, but only ever serves the latest month — AC per
+        # spec §6 Out of Scope).
+        rows_by_type: dict[str, sqlite3.Row] = {}
+        cursor = conn.execute(
+            """
+            SELECT rb.* FROM rent_benchmarks rb
+            INNER JOIN (
+                SELECT room_type, MAX(month) AS max_month
+                FROM rent_benchmarks WHERE postcode_district = ?
+                GROUP BY room_type
+            ) latest ON rb.room_type = latest.room_type AND rb.month = latest.max_month
+            WHERE rb.postcode_district = ?
+            """,
+            (pc, pc),
+        )
+        for row in cursor.fetchall():
+            rows_by_type[row["room_type"]] = row
+    finally:
+        conn.close()
+
+    if not rows_by_type:
+        # District not in DB at all — never fabricated, honest no-data response.
+        return {
+            "postcode_district": pc,
+            "status": "no_data",
+            "confidence": "none",
+            "last_updated": None,
+            "data_tier": "zero",
+            "message": f"No listing data available for {pc}. This district may not have been scanned yet.",
+            "data": None,
+        }
+
+    room_payloads = [
+        _room_type_payload(rows_by_type.get(rt), rt, bills, include_comparables)
+        for rt in wanted_types
+    ]
+
+    # Top-level status/confidence/data_tier must reflect only the room types
+    # actually being returned (wanted_types), not the whole district. If the
+    # caller filters to room_type=double_ensuite (thin) while the district
+    # overall has a large-tier `double` figure, reporting district-wide
+    # confidence=high here would mislead the caller about the very room type
+    # they asked for — exactly the kind of false-confidence signal the
+    # zero-hallucination principle exists to prevent.
+    present_rows = [rows_by_type[rt] for rt in wanted_types if rt in rows_by_type]
+    best_tier = max((r["data_tier"] for r in present_rows), key=lambda t: _TIER_RANK.get(t, 0), default="zero")
+    last_updated = max((r["last_updated"] for r in present_rows if r["last_updated"]), default=None)
+    total_listings = sum((r["total_listings"] or 0) for r in present_rows)
+
+    if best_tier == "zero":
+        status = "no_data"
+        message = f"No listing data available for {pc} at last scan."
+        data = None
+    else:
+        status = "available" if best_tier in ("large", "medium") else "limited"
+        message = None if status == "available" else (
+            f"Limited listing data for {pc} — sample sizes are too small for full statistical benchmarks in some room types."
+        )
+        data = {"total_listings": total_listings, "room_types": room_payloads}
+
+    return {
+        "postcode_district": pc,
+        "status": status,
+        "confidence": _tier_confidence(best_tier),
+        "last_updated": last_updated,
+        "data_tier": best_tier,
+        **({"message": message} if message else {}),
+        "data": data,
+    }
 
 
 # ── Chatbot (self-contained, no Mac mini dependency) ──

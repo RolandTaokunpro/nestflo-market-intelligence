@@ -321,15 +321,11 @@ export default function Home() {
               <ul className="space-y-2 mb-6 flex-1 relative">
                 <li className="flex items-start gap-2 text-sm text-brand-lavender">
                   <span className="text-brand-cyan font-bold flex-shrink-0">&rarr;</span>
-                  Includes HMO Market Reports
+                  Includes 20 HMO Market Reports
                 </li>
                 <li className="flex items-start gap-2 text-sm text-brand-lavender">
                   <span className="text-brand-cyan font-bold flex-shrink-0">&rarr;</span>
-                  Includes Target vs Comparables
-                </li>
-                <li className="flex items-start gap-2 text-sm text-brand-lavender">
-                  <span className="text-brand-cyan font-bold flex-shrink-0">&rarr;</span>
-                  Multiple reports per calendar month
+                  Includes 20 Target vs Comparables
                 </li>
               </ul>
               <button

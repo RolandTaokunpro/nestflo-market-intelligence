@@ -227,8 +227,12 @@ def process_district_analysis(path: Path, conn: sqlite3.Connection, stats: dict)
 
         thin_rents_json = None
         if tier == "thin":
-            comps = parsed.get("comparables") or []
-            rents = [c.get("rent_pcm") for c in comps if c.get("rent_pcm") is not None]
+            # insufficient_data rooms have no 'comparables' key on the analysis
+            # JSON (parse_v2_room only populates it for complete/median_only
+            # status) — the real per-listing rents live in raw_listings.json,
+            # already loaded as raw_by_type for the large/medium bills-split.
+            raw_listings = (raw_by_type or {}).get(room_type, [])
+            rents = [l.get("rent_pcm") for l in raw_listings if l.get("rent_pcm") is not None]
             thin_rents_json = json.dumps(rents) if rents else None
 
         bi_count = bi_mean = be_count = be_mean = None

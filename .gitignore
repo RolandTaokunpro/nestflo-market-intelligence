@@ -3,4 +3,9 @@ __pycache__/
 *.pyc
 .env
 venv/
+.venv/
+.venv-deploy/
+.pytest_cache/
+.coverage
+.coverage.*
 chatbot_leads.jsonl

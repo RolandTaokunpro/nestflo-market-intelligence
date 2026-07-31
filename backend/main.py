@@ -54,6 +54,14 @@ ROOM_TYPES = ["single", "double", "double_ensuite", "studio"]
 
 app = FastAPI(title="Nestflo Market Intelligence API", version="1.0.0")
 
+# ── Goldmine Finder v3 (scoring engine) ──
+# Mounted routes: POST /api/goldmine/score, GET /api/goldmine/district/{code}
+# Auth: X-API-Key header gated against GOLDMINE_API_KEY (fail-closed 401).
+# Built by Linus TDD-first from Compass Gherkin spec (19 scenarios); QA'd by
+# James (mutation 93.95% >= 80 floor). See backend/goldmine/.
+from goldmine.api import create_app as create_goldmine_app
+app.include_router(create_goldmine_app().router)
+
 # ── Middleware ──
 
 # Security headers

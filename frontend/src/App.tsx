@@ -15,9 +15,9 @@ export default function App() {
           <Route path="/market-reports" element={<MarketReports />} />
           <Route path="/target-vs-comparable" element={<TargetVsComparable />} />
           <Route path="/coming-soon" element={<ComingSoon />} />
-          <Route path="/goldmine-finder" element={<GoldmineFinder />} />
           <Route path="*" element={<Home />} />
         </Route>
+        <Route path="/goldmine-finder" element={<GoldmineFinder />} />
       </Routes>
     </BrowserRouter>
   );

@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import MarketReports from './pages/MarketReports';
 import TargetVsComparable from './pages/TargetVsComparable';
 import ComingSoon from './pages/ComingSoon';
+import GoldmineFinder from './pages/GoldmineFinder';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/market-reports" element={<MarketReports />} />
           <Route path="/target-vs-comparable" element={<TargetVsComparable />} />
           <Route path="/coming-soon" element={<ComingSoon />} />
+          <Route path="/goldmine-finder" element={<GoldmineFinder />} />
           <Route path="*" element={<Home />} />
         </Route>
       </Routes>

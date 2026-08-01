@@ -9,3 +9,4 @@ venv/
 .coverage
 .coverage.*
 chatbot_leads.jsonl
+backend/.coverage

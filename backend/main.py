@@ -670,6 +670,69 @@ async def api_contact(req: ContactRequest):
     return {"success": True, "message": "Thank you. We'll be in touch within one business day."}
 
 
+# ── Goldmine Finder Landing Page — Public Job Intake ─────────────────────────
+# POST /api/goldmine/jobs — public endpoint, no auth required.
+# TDD spec: t_12aa4cf5/spec.md, Sections C + F.
+
+from goldmine_jobs import (
+    GoldmineJobRequest,
+    GoldmineJobResponse,
+    ensure_table,
+    insert_job,
+    validate_budget,
+    validate_postcodes,
+)
+
+
+@app.on_event("startup")
+def _ensure_goldmine_jobs_table():
+    ensure_table()
+
+
+@app.post("/api/goldmine/jobs", status_code=201)
+async def api_goldmine_jobs(req: GoldmineJobRequest):
+    import uuid
+    import datetime as dt
+
+    # Validate and normalize postcodes (returns 400 on failure)
+    try:
+        postcodes = validate_postcodes(req.postcodes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    # Parse budget (returns 400 on failure)
+    try:
+        budget = validate_budget(req.max_budget) if req.max_budget is not None else None
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    job_id = str(uuid.uuid4())
+    eta = dt.datetime.utcnow() + dt.timedelta(minutes=30)
+    estimated = f"~30 minutes"
+
+    insert_job(
+        job_id=job_id,
+        email=req.email,
+        postcodes=postcodes,
+        room_type=req.room_type,
+        max_budget=budget,
+        estimated_completion=estimated,
+    )
+
+    log_request("goldmine_job", {
+        "job_id": job_id,
+        "email": req.email,
+        "postcodes": postcodes,
+        "room_type": req.room_type,
+    })
+
+    return GoldmineJobResponse(
+        job_id=job_id,
+        status="queued",
+        estimated_completion=estimated,
+    ).model_dump()
+
+
 # ── Rent Benchmarks API ──
 # Spec: t_16c7d0ef/spec.md. Data: backend/rent_benchmarks_etl.py (run offline,
 # DB committed to git — see Dockerfile, this endpoint never writes to disk).

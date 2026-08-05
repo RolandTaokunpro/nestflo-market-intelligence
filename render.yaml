@@ -9,8 +9,6 @@ services:
       - key: PORT
         value: "10000"
       - key: PIPELINE_BACKEND_URL
-        sync: false
-        value: ""
+        value: "https://pipeline.hmo-market-intelligence.co.uk"
       - key: PIPELINE_API_KEY
-        sync: false
-        value: ""
+        value: "nestflo-pipeline-key-2026"

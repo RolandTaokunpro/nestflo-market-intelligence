@@ -1,0 +1,100 @@
+# CI — Gate 1. Runs on every PR to main. Nothing reaches Hawk or James until this is green.
+#
+# Matches this repo's real layout (verified 2026-08-16):
+#   - backend:  FastAPI + pytest (60 tests under backend/tests/{unit,integration,e2e})
+#   - frontend: React + Vite + Vitest (scripts: build = "tsc -b && vite build", test = "vitest run")
+#   - deploy branch: main (NOT production — this repo ships from main)
+#
+# NOTE: the "checks" rollup name that auto-merge.yml keys on is "ci-checks"
+# (the status check context, not the job id). Keep the two in sync or
+# auto-merge will never see CI as green.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backend deps
+        run: |
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-dev.txt
+      - name: Run backend tests
+        working-directory: backend
+        run: pytest tests/ -q
+
+  frontend:
+    name: frontend (vitest + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test -- --run
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  human-gate:
+    name: sensitive-path scan
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect sensitive paths
+        id: scan
+        run: |
+          set -euo pipefail
+          FILES=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}")
+          echo "Changed files:"
+          echo "$FILES"
+          # Corrected globs to this repo's actual layout (see §6 of the design;
+          # original globs were guesses). Adjust as the repo grows.
+          if echo "$FILES" | grep -qE '(^backend/goldmine/|^render\.yaml$|^Dockerfile$|^docker-compose\.yml$)|\.env'; then
+            echo "sensitive=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sensitive=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Apply human gate
+        if: steps.scan.outputs.sensitive == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --add-label "needs:roland"
+          echo "::notice::Sensitive path touched — human approval required."
+      # NOTE: deliberately NO automatic "clear human gate" step. A later
+      # non-sensitive push must NOT silently un-gate a previously-sensitive PR —
+      # the human removes the label by hand. (This closes the label-race that the
+      # original draft's "--remove-label || true" would have reopened.)

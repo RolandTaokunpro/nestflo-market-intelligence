@@ -1,0 +1,125 @@
+# Deploy — Gate 2. The only component that references production credentials.
+# No agent holds these secrets; they live in the GitHub `production` environment
+# and are injected into THIS job only.
+#
+# Corresponds to design §8 (rollback). NOTE: the smoke test asserts a SPECIFIC
+# endpoint response shape, not a bare HTTP 200 — a bare 200 on a React shell
+# returns identical HTML for a broken deploy. Adjust the assertions to the real
+# health route for this service.
+#
+# Secrets required (set via `gh secret set --env production`):
+#   RENDER_API_KEY, RENDER_SERVICE_ID, SUPABASE_ACCESS_TOKEN,
+#   SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF, PRODUCTION_HEALTH_URL
+
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production   # secrets are scoped to this environment
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Capture the currently-live deploy so we can roll back to it ──────────
+      - name: Record current live deploy
+        id: prev
+        run: |
+          set -euo pipefail
+          PREV=$(curl -fsS \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Accept: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=20" \
+            | jq -r '[.[].deploy | select(.status == "live")][0].id // empty')
+          echo "Previous live deploy: ${PREV:-none}"
+          echo "id=${PREV}" >> "$GITHUB_OUTPUT"
+
+      # ── Migrations. NOT automatically reversible (see design §8) ─────────────
+      - name: Run Supabase migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest link \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --password "$SUPABASE_DB_PASSWORD"
+          npx --yes supabase@latest db push
+
+      - name: Trigger Render deploy
+        id: deploy
+        run: |
+          set -euo pipefail
+          RESP=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+          ID=$(echo "$RESP" | jq -r '.id')
+          echo "Deploy id: $ID"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for deploy to go live
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          ID="${{ steps.deploy.outputs.id }}"
+          while true; do
+            STATUS=$(curl -fsS \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$ID" \
+              | jq -r '.status')
+            echo "status=$STATUS"
+            case "$STATUS" in
+              live) echo "Deploy live."; break ;;
+              build_failed|update_failed|canceled|pre_deploy_failed)
+                echo "Deploy failed: $STATUS"; exit 1 ;;
+            esac
+            sleep 10
+          done
+
+      # ── Smoke test: assert REAL content, not a bare 200 ────────────────────
+      - name: Smoke test
+        env:
+          HEALTH_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            BODY=$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || echo "")
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTH_URL" || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            if [ "$CODE" = "200" ] && [ -n "$BODY" ]; then
+              echo "Smoke test passed."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Smoke test failed — health endpoint never returned 200 with a body."
+          exit 1
+
+      # ── Automatic rollback. Never waits on an agent. ────────────────────────
+      # Roll back to the SPECIFIC previous-live deploy id via the
+      # /deploys/{id}/rollback route (NOT the /rollback body form, which 404s).
+      - name: Roll back on failure
+        if: failure() && steps.prev.outputs.id != ''
+        run: |
+          set -euo pipefail
+          echo "::error::Deploy or smoke test failed — rolling back to ${{ steps.prev.outputs.id }}"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/${{ steps.prev.outputs.id }}/rollback"
+          echo "::warning::Code rolled back. Database migrations were NOT reverted — verify schema/code compatibility manually."

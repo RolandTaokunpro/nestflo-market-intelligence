@@ -1,0 +1,106 @@
+# Auto-merge on verdicts — the component that replaces James's deploy action.
+# No agent merges; state does. Two green verdict labels + green CI = merge.
+#
+# Verdict labels (carried by agents, read by this workflow):
+#   hawk:approved / hawk:changes-requested
+#   james:qa-passed  / james:qa-failed
+#   needs:roland     (human gate — applied by ci.yml, removed by hand only)
+
+name: Auto-merge on verdicts
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled, synchronize]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: automerge-${{ github.event.pull_request.number || github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.pull_request.number || '' }}" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            HEAD="${{ github.event.workflow_run.head_branch }}"
+            NUM=$(gh pr list --head "$HEAD" --state open --json number -q '.[0].number // empty')
+            echo "number=${NUM}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # IMPORTANT: we run label/CI evaluation INSIDE the gh (node) step below,
+      # NOT via `if:` gates on prior shell steps, because the labels + check
+      # status must be read at the moment of merge — not cached from an earlier
+      # step. Reading fresh right before `gh pr merge` shrinks the label race.
+
+      - name: Evaluate and merge
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+
+          LABELS=$(gh pr view "$PR" --json labels -q '.labels[].name')
+          has() { echo "$LABELS" | grep -qx "$1"; }
+
+          # Blocking conditions first — any of these = no merge.
+          if has "needs:roland"; then
+            echo "::notice::Human gate present — not merging."; exit 0
+          fi
+          if has "hawk:changes-requested"; then
+            echo "::notice::Hawk requested changes — not merging."; exit 0
+          fi
+          if has "james:qa-failed"; then
+            echo "::notice::James failed QA — not merging."; exit 0
+          fi
+
+          # Both approvals required.
+          if ! has "hawk:approved"; then
+            echo "::notice::Awaiting Hawk code-review verdict."; exit 0
+          fi
+          if ! has "james:qa-passed"; then
+            echo "::notice::Awaiting James QA verdict."; exit 0
+          fi
+
+          # CI must be green. The status-check CONTEXT for the whole CI workflow
+          # (the "checks" rollup) — match the name ci.yml produces.
+          STATE=$(gh pr view "$PR" --json statusCheckRollup \
+            -q '[.statusCheckRollup[] | select(.name == "ci-checks") | .conclusion] | first // "PENDING"')
+
+          # Fallback: if the orchestrated rollup name isn't found, require ALL
+          # individual checks to be SUCCESS and none FAILURE/PENDING.
+          if [ "$STATE" = "PENDING" ]; then
+            DETAILS=$(gh pr view "$PR" --json statusCheckRollup -q '.statusCheckRollup')
+            FAILS=$(echo "$DETAILS" | grep -c 'FAILURE' || true)
+            PENDS=$(echo "$DETAILS" | grep -c '"PENDING"\|"IN_PROGRESS"' || true)
+            if [ "$FAILS" != "0" ] || [ "$PENDS" != "0" ]; then
+              echo "::notice::CI not green — not merging."; exit 0
+            fi
+          elif [ "$STATE" != "SUCCESS" ]; then
+            echo "::notice::CI not green (state: $STATE) — not merging."; exit 0
+          fi
+
+          MERGEABLE=$(gh pr view "$PR" --json mergeable -q '.mergeable')
+          if [ "$MERGEABLE" != "MERGEABLE" ]; then
+            echo "::notice::PR not mergeable (state: $MERGEABLE) — not merging."; exit 0
+          fi
+
+          echo "All verdicts green. Merging PR #$PR."
+          gh pr merge "$PR" --squash --delete-branch

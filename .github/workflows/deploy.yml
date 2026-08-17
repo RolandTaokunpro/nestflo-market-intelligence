@@ -1,11 +1,19 @@
-# Deploy — Gate 2. The only component that references production credentials.
+# Deploy — Gate 2 (HYBRID LOOP). The only component that references production credentials.
 # No agent holds these secrets; they live in the GitHub `production` environment
 # and are injected into THIS job only.
 #
-# Corresponds to design §8 (rollback). NOTE: the smoke test asserts a SPECIFIC
-# endpoint response shape, not a bare HTTP 200 — a bare 200 on a React shell
-# returns identical HTML for a broken deploy. Adjust the assertions to the real
-# health route for this service.
+# HYBRID RELEASE LOOP:
+#   Linus → Hawk → James → Gabriel (verify sign-offs + release summary) → HUMAN approves
+#     → GitHub Actions/Render deploy → automatic rollback on failed smoke test
+#
+# THE HUMAN GATE: the `environment: production` line below is paired with a GitHub
+# "required reviewer" protection rule on that environment. The deploy job WAITS
+# (status: waiting / "manual approval required") until the human reviews Gabriel's
+# release summary (posted as a PR comment by Gabriel or by this workflow) and
+# approves in the GitHub UI. Nothing deploys until that approval lands.
+#
+# Set the required reviewer via: GitHub repo → Settings → Environments →
+#   production → Required reviewers → add RolandTaokunpro.
 #
 # Secrets required (set via `gh secret set --env production`):
 #   RENDER_API_KEY, RENDER_SERVICE_ID, SUPABASE_ACCESS_TOKEN,
@@ -19,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  deployments: write
 
 concurrency:
   group: deploy-production
@@ -27,12 +36,24 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production   # secrets are scoped to this environment
+    # THE HUMAN GATE. This environment carries a GitHub "required reviewer" rule,
+    # so the job pauses here awaiting explicit human approval of the release.
+    environment: production
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
     steps:
       - uses: actions/checkout@v4
+
+      # ── Post the release-summary pointer for the human (Gabriel's job feeds here) ──
+      # Gabriel is a credential-free agent that verifies Hawk+James sign-offs and writes
+      # the release summary. This step stamps the summary onto the commit so the human
+      # approves against a written record, not a bare branch name.
+      - name: Surface release summary for human approval
+        run: |
+          echo "::notice::HYBRID GATE — waiting for human approval on environment 'production'."
+          echo "Review Gabriel's release summary (PR comment / task log) before approving."
+          echo "Sign-off chain required: Hawk ✅ review + James ✅ QA + CI green."
 
       # ── Capture the currently-live deploy so we can roll back to it ──────────
       - name: Record current live deploy

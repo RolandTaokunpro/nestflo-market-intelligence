@@ -1154,6 +1154,13 @@ async def proxy_leads(request: Request):
 
 # ── Serve React SPA (production) ──
 
+# Health check — must be defined BEFORE the SPA catch-all so it isn't swallowed.
+# The deploy smoke test hits this to prove the FastAPI backend is actually up
+# (a bare 200 on the static React shell would be a false green).
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok"})
+
 if IS_PROD:
     # Mount static assets directory
     app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")

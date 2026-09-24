@@ -53,6 +53,16 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <a href="/marketdata-08-2026" className="hover:text-white transition-colors">
+                  Market Data — August 2026
+                </a>
+              </li>
+              <li>
+                <a href="/rents/" className="hover:text-white transition-colors">
+                  District Rents Archive
+                </a>
+              </li>
+              <li>
                 <a
                   href="https://spareroom-automations.listsync.co.uk/"
                   target="_blank"

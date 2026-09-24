@@ -1,0 +1,15 @@
+# Nestflo HMO Market Intelligence
+
+> Monthly summaries of UK HMO (house in multiple occupation) room rents by postcode district, built from live SpareRoom listings.
+
+Coverage: 1,730 postcode districts, 41,334 live room listings, 117 towns and cities. Current report month: August 2026. Updated monthly.
+
+## What is published
+
+- Per district: median (P50) advertised rent per room type (double, double en-suite, single, studio) with the number of listings behind each figure, the share of live ads offering immediate move-in (an advertising lead-time indicator), the agency vs private advertiser mix, and a supply band.
+- Medians are shown only where at least 3 listings were captured and the district's data quality tier is Full or Median-only.
+- Every figure carries its sample size and report month.
+
+## What is not published
+
+Summaries only: no per-listing data, addresses, advertiser names, listing URLs, quartiles, minimum or maximum rents, full historical time series (each district page carries a compact month-by-month summary table; deep series are part of the paid products), or bulk downloads. Detailed evidence reports and comparables are separate commercial products from Nestflo.

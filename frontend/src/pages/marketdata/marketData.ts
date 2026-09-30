@@ -162,11 +162,6 @@ export function latestEditionKey(): string {
     .map((edition) => edition.key)[0];
 }
 
-/** Status for an arbitrary YYYY-MM key; unpublished months are "coming". */
-export function editionStatus(key: string): EditionStatus {
-  return EDITIONS[key]?.status ?? 'coming';
-}
-
 export interface RoomRow {
   type: string;
   listings: string;

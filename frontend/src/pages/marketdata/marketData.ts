@@ -73,19 +73,26 @@ export interface Edition {
   label: string;
   status: EditionStatus;
   note: string;
-  slug?: string;
   latest?: boolean;
 }
 
+/**
+ * Editions keyed by `YYYY-MM`. `status` is the availability contract: only a
+ * status other than 'coming' may be linked, and the report manifest
+ * (marketDataReports.ts) must ship a matching page — a test enforces both
+ * directions, so an edition cannot promise a report that is not served.
+ */
 export const EDITIONS: Record<string, Edition> = {
   '2026-07': {
     key: '2026-07',
     year: 2026,
     month: 7,
     label: 'July 2026',
-    status: 'pilot',
+    // A pilot edition with no published marketdata-07-2026 report page: 'coming'
+    // keeps it non-navigable instead of linking to a soft-404 (QA R1). Flip the
+    // status in the same commit that ships the page and regenerates the manifest.
+    status: 'coming',
     note: 'Pilot edition · partial coverage',
-    slug: 'marketdata-07-2026',
   },
   '2026-08': {
     key: '2026-08',
@@ -94,7 +101,6 @@ export const EDITIONS: Record<string, Edition> = {
     label: 'August 2026',
     status: 'available',
     note: '1,730 districts · 41,884 listings · P50 £652',
-    slug: 'marketdata-08-2026',
     latest: true,
   },
   '2026-09': {

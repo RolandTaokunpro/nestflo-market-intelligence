@@ -10,6 +10,7 @@
 import { CITIES, getCityByPostcode, validatePostcode, type City } from '../../data/cities';
 import { KNOWN_CITY_SLUGS } from './marketData';
 import { KNOWN_DISTRICT_SLUGS } from './marketDataDistricts';
+import { KNOWN_EDITION_KEYS } from './marketDataReports';
 
 export type SuggestionKind = 'City' | 'District';
 
@@ -20,10 +21,32 @@ export interface Suggestion {
   kind: SuggestionKind;
 }
 
-/** `/marketdata-08-2026` for the `2026-08` edition key. */
+/**
+ * `/marketdata-08-2026` for the `2026-08` edition key. Formatting only — this is
+ * not the link contract. Emit month links with `reportHref`, which refuses any
+ * edition whose report page does not ship.
+ */
 export function reportPath(editionKey: string): string {
   const [year, month] = editionKey.split('-');
   return `/marketdata-${month}-${year}`;
+}
+
+/**
+ * A report page exists only when backend/static_pages/marketdata-MM-YYYY.html
+ * ships (and backend/main.py registers its route). July 2026 has an edition but
+ * no report page, so it must never be linked (AC-12, James QA R1).
+ */
+export function hasReportPage(editionKey: string | null | undefined): boolean {
+  return typeof editionKey === 'string' && KNOWN_EDITION_KEYS.has(editionKey);
+}
+
+/**
+ * Href for a month link, or null when no report page is shipped — the caller
+ * then renders a non-navigating cell instead of a link that soft-404s.
+ */
+export function reportHref(editionKey: string | null | undefined): string | null {
+  if (typeof editionKey !== 'string' || !hasReportPage(editionKey)) return null;
+  return reportPath(editionKey);
 }
 
 /** `/rents/bristol/` */

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { EDITION_YEARS, MONTH_NAMES, editionsForYear } from './marketData';
-import { reportPath } from './marketDataLinks';
+import { reportHref } from './marketDataLinks';
 
 /**
- * Monthly Snapshots grid: year tabs plus a 12-cell month grid. Published months
- * are full-page links to the real /marketdata-MM-YYYY report pages; unpublished
- * months are non-navigating cells (AC-12).
+ * Monthly Snapshots grid: year tabs plus a 12-cell month grid. A month is a
+ * full-page link to its /marketdata-MM-YYYY report page only when that page
+ * actually ships (reportHref is manifest-guarded); every other month is a
+ * non-navigating cell (AC-12).
  */
 export default function MonthlySnapshots() {
   const [year, setYear] = useState(2026);
@@ -35,15 +36,19 @@ export default function MonthlySnapshots() {
 
       <div className="md-monthgrid">
         {months.map((edition) => {
-          const href = edition.status === 'coming' ? null : reportPath(edition.key);
-          const classes = [
-            'md-mcell',
-            edition.status === 'coming' ? 'md-coming' : 'md-available',
-            edition.status === 'pilot' ? 'md-pilot' : '',
-            edition.latest ? 'md-latest' : '',
-          ]
+          // The shipped report page is the only gate — an edition key with no
+          // page on disk stays a non-navigating cell (QA R1).
+          const href = reportHref(edition.key);
+          const classes = ['md-mcell', href ? 'md-available' : 'md-coming', edition.latest ? 'md-latest' : '']
             .filter(Boolean)
             .join(' ');
+          const cell = (
+            <>
+              <span className="md-mn">{MONTH_NAMES[edition.month - 1]}</span>
+              <span className="md-ms">{edition.note}</span>
+              {edition.latest && <span className="md-visually-hidden">Latest snapshot</span>}
+            </>
+          );
 
           return href ? (
             <a
@@ -52,12 +57,7 @@ export default function MonthlySnapshots() {
               data-testid={`md-cell-${edition.key}`}
               href={href}
             >
-              <span className="md-mn">{MONTH_NAMES[edition.month - 1]}</span>
-              <span className="md-ms">{edition.note}</span>
-              {edition.latest && <span className="md-visually-hidden">Latest snapshot</span>}
-              {edition.status === 'pilot' && (
-                <span className="md-visually-hidden">Pilot (partial coverage)</span>
-              )}
+              {cell}
             </a>
           ) : (
             <div
@@ -66,8 +66,7 @@ export default function MonthlySnapshots() {
               data-testid={`md-cell-${edition.key}`}
               aria-disabled="true"
             >
-              <span className="md-mn">{MONTH_NAMES[edition.month - 1]}</span>
-              <span className="md-ms">{edition.note}</span>
+              {cell}
             </div>
           );
         })}

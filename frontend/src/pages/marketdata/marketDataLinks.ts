@@ -9,6 +9,7 @@
 
 import { CITIES, getCityByPostcode, validatePostcode, type City } from '../../data/cities';
 import { KNOWN_CITY_SLUGS } from './marketData';
+import { KNOWN_DISTRICT_SLUGS } from './marketDataDistricts';
 
 export type SuggestionKind = 'City' | 'District';
 
@@ -37,6 +38,19 @@ export function districtPath(citySlug: string, district: string): string {
 
 export function hasCityPage(slug: string | null | undefined): boolean {
   return typeof slug === 'string' && KNOWN_CITY_SLUGS.has(slug);
+}
+
+/**
+ * A district page exists only when its directory ships under
+ * backend/static_marketdata/rents/{city}/{district}/ — postcodes such as BS12
+ * are valid but have no archive page, so they must not be linked (AC-14).
+ */
+export function hasDistrictPage(
+  citySlug: string | null | undefined,
+  district: string | null | undefined
+): boolean {
+  if (typeof citySlug !== 'string' || typeof district !== 'string') return false;
+  return KNOWN_DISTRICT_SLUGS.has(`${citySlug}/${district.toLowerCase()}`);
 }
 
 /** Href for a city card, or null when no archive page exists (ComingSoon fallback). */
@@ -73,6 +87,8 @@ function matchesCityName(city: City, query: string): boolean {
 /**
  * City/district suggestions for the hero search. Only entries with a real
  * /rents/ page are returned, so the dropdown can never offer a dead link.
+ * A postcode whose district archive is missing (BS12, M10) falls back to the
+ * always-live city page instead of 404ing (AC-14).
  */
 export function searchSuggestions(query: string, limit = 5): Suggestion[] {
   const trimmed = query.trim();
@@ -83,16 +99,26 @@ export function searchSuggestions(query: string, limit = 5): Suggestion[] {
     const city = getCityByPostcode(upper);
     if (!city) return [];
     const slug = slugForCity(city);
-    return hasCityPage(slug)
+    if (!hasCityPage(slug)) return [];
+
+    const sub = `${city.name} · ${city.postcodes.length} districts`;
+    return hasDistrictPage(slug, upper)
       ? [
           {
             label: upper,
-            sub: `${city.name} · ${city.postcodes.length} districts`,
+            sub,
             href: districtPath(slug, upper),
             kind: 'District',
           },
         ]
-      : [];
+      : [
+          {
+            label: upper,
+            sub,
+            href: cityPath(slug),
+            kind: 'City',
+          },
+        ];
   }
 
   return CITIES.filter((city) => matchesCityName(city, trimmed))

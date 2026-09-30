@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 import MarketData from '../../src/pages/MarketData';
+import { hasReportPage } from '../../src/pages/marketdata/marketDataLinks';
 
 function renderPage() {
   return render(
@@ -227,11 +228,13 @@ describe('AC-9/AC-10 edition navigator', () => {
       'aria-label',
       'August 2026 — Latest edition'
     );
+    // July carries approved pilot copy, but no marketdata-07-2026 report page
+    // ships (QA R1), so the pill is a disabled coming-soon entry like the rest.
     expect(within(insight()).getByTestId('md-pill-2026-07')).toHaveAttribute(
       'aria-label',
-      'July 2026 — Pilot · partial coverage'
+      'July 2026 — Coming soon'
     );
-    for (const month of ['01', '02', '03', '04', '05', '06', '09', '10', '11', '12']) {
+    for (const month of ['01', '02', '03', '04', '05', '06', '07', '09', '10', '11', '12']) {
       const pill = within(insight()).getByTestId(`md-pill-2026-${month}`);
       expect(pill).toHaveAttribute('aria-label', expect.stringContaining('Coming soon'));
       expect(pill).toBeDisabled();
@@ -263,19 +266,23 @@ describe('AC-9/AC-10 edition navigator', () => {
     );
   });
 
-  it('shows the pilot empty state for July 2026 and returns to August via the CTA', async () => {
-    await user.click(within(insight()).getByTestId('md-pill-2026-07'));
-    expect(screen.getByTestId('md-empty-title')).toHaveTextContent('July 2026');
-    expect(screen.getByTestId('md-empty-note')).toHaveTextContent(
-      'Pilot edition · partial coverage'
-    );
+  it('does not offer July 2026 as a selectable edition while its report page is missing', async () => {
+    // QA R1: July used to be selectable and showed a "pilot" empty state, which
+    // implied a July edition a visitor could read. No marketdata-07-2026 report
+    // page exists, so the pill is disabled and the navigator stays on August.
+    const july = within(insight()).getByTestId('md-pill-2026-07');
+    expect(july).toBeDisabled();
+    expect(july).toHaveAttribute('aria-pressed', 'false');
+    expect(july).toHaveClass('md-coming');
+
+    await user.click(within(insight()).getByTestId('md-pill-2026-08'));
+    expect(screen.getByTestId('md-kpi-median')).toHaveTextContent('£652');
+    expect(screen.queryByTestId('md-insight-empty')).toBeNull();
+    expect(screen.getByTestId('md-insight-sub')).toHaveTextContent('August 2026');
     expect(within(insight()).getByTestId('md-pill-2026-07')).toHaveAttribute(
       'aria-pressed',
-      'true'
+      'false'
     );
-
-    await user.click(within(insight()).getByRole('button', { name: 'View latest edition' }));
-    expect(screen.getByTestId('md-kpi-median')).toHaveTextContent('£652');
   });
 
   it('re-selects the latest available edition when switching year back to 2026', async () => {
@@ -319,16 +326,19 @@ describe('AC-11/AC-12 monthly snapshots grid', () => {
     expect(within(snapshots()).getAllByTestId(/^md-cell-/)).toHaveLength(12);
   });
 
-  it('marks August latest, July pilot and the rest coming soon', () => {
+  it('marks August latest, July unlinked and the rest coming soon', () => {
     const august = screen.getByTestId('md-cell-2026-08');
     expect(august.tagName).toBe('A');
     expect(august).toHaveAttribute('href', '/marketdata-08-2026');
     expect(august).toHaveTextContent('Latest snapshot');
 
+    // QA R1: no marketdata-07-2026.html ships, so July is not a link — a dead
+    // href here soft-404s through the SPA catch-all.
     const july = screen.getByTestId('md-cell-2026-07');
-    expect(july.tagName).toBe('A');
-    expect(july).toHaveAttribute('href', '/marketdata-07-2026');
-    expect(july).toHaveTextContent('Pilot (partial coverage)');
+    expect(july.tagName).toBe('DIV');
+    expect(july).toHaveAttribute('aria-disabled', 'true');
+    expect(july).not.toHaveAttribute('href');
+    expect(july).toHaveTextContent('Pilot edition · partial coverage');
 
     const september = screen.getByTestId('md-cell-2026-09');
     expect(september.tagName).toBe('DIV');
@@ -341,6 +351,20 @@ describe('AC-11/AC-12 monthly snapshots grid', () => {
       expect(cell).toHaveAttribute('aria-disabled', 'true');
       expect(cell).toHaveTextContent('Coming soon');
     }
+  });
+
+  it('emits no /marketdata- link for a month whose report page does not ship (QA R1)', () => {
+    const monthLinks = Array.from(document.querySelectorAll('a[href^="/marketdata-"]'));
+    expect(monthLinks.length).toBeGreaterThan(0);
+    for (const link of monthLinks) {
+      const slug = (link.getAttribute('href') ?? '').slice(1);
+      const [, month, year] = slug.split('-');
+      expect(hasReportPage(`${year}-${month}`)).toBe(true);
+    }
+    // The direction that failed QA: July is present as a cell, never as a link.
+    const july = screen.getByTestId('md-cell-2026-07');
+    expect(july.tagName).not.toBe('A');
+    expect(document.querySelectorAll('a[href="/marketdata-07-2026"]')).toHaveLength(0);
   });
 
   it('renders all 12 months of 2027 as disabled with no links', () => {

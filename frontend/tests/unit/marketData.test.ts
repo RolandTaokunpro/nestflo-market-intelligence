@@ -26,9 +26,15 @@ import {
 } from '../../src/pages/marketdata/marketData';
 
 import { KNOWN_DISTRICTS } from '../../src/pages/marketdata/marketDataDistricts';
+import {
+  KNOWN_REPORT_SLUGS,
+  KNOWN_EDITION_KEYS,
+} from '../../src/pages/marketdata/marketDataReports';
 
 import {
   reportPath,
+  reportHref,
+  hasReportPage,
   cityPath,
   districtPath,
   hasCityPage,
@@ -178,8 +184,12 @@ describe('edition model', () => {
     expect(EDITIONS['2026-08'].status).toBe('available');
   });
 
-  it('marks July 2026 as pilot with partial coverage', () => {
-    expect(EDITIONS['2026-07'].status).toBe('pilot');
+  it('keeps the July 2026 pilot edition non-navigable until its report page ships', () => {
+    // July is a real pilot edition, but backend/static_pages holds no
+    // marketdata-07-2026.html, so it must not be presented as a live edition
+    // (the SPA catch-all would soft-404 it — James QA R1). The note keeps the
+    // approved pilot copy; only the availability status changes.
+    expect(EDITIONS['2026-07'].status).toBe('coming');
     expect(EDITIONS['2026-07'].note).toBe('Pilot edition · partial coverage');
   });
 
@@ -228,13 +238,119 @@ describe('edition model', () => {
 describe('TEST-4 real report paths (AC-12: no hash-only links)', () => {
   it('builds /marketdata-MM-YYYY from an edition key', () => {
     expect(reportPath('2026-08')).toBe('/marketdata-08-2026');
-    expect(reportPath('2026-07')).toBe('/marketdata-07-2026');
+    expect(reportHref('2026-08')).toBe('/marketdata-08-2026');
   });
 
-  it('never emits a hash link', () => {
+  it('refuses a link to a month whose report page is not shipped (QA R1)', () => {
+    expect(hasReportPage('2026-08')).toBe(true);
+    expect(hasReportPage('2026-07')).toBe(false);
+    expect(hasReportPage('2026-09')).toBe(false);
+    expect(hasReportPage('2027-01')).toBe(false);
+    expect(hasReportPage('not-an-edition')).toBe(false);
+    expect(hasReportPage(null)).toBe(false);
+    expect(hasReportPage(undefined)).toBe(false);
+
+    // July was rendered as a live pilot link while no marketdata-07-2026.html
+    // exists — the guard makes that href impossible, not merely unlikely.
+    expect(reportHref('2026-07')).toBeNull();
+    expect(reportHref('2026-09')).toBeNull();
+    expect(reportHref('2027-01')).toBeNull();
+    expect(reportHref('not-an-edition')).toBeNull();
+    expect(reportHref(null)).toBeNull();
+    expect(reportHref(undefined)).toBeNull();
+  });
+
+  it('never emits a hash link from an edition key, and never a path for an unknown one', () => {
     for (const key of Object.keys(EDITIONS)) {
       expect(reportPath(key).startsWith('/marketdata-')).toBe(true);
       expect(reportPath(key)).not.toContain('#');
+      const href = reportHref(key);
+      if (href !== null) {
+        expect(href).toBe(reportPath(key));
+        expect(href).not.toContain('#');
+      }
+    }
+    expect(reportHref('2026-07')).toBeNull();
+  });
+});
+
+describe('AC-12 report manifest — the shipped static page is the only truth', () => {
+  // The static report pages FastAPI serves from /marketdata-MM-YYYY — the only
+  // proof that a month link resolves (AC-12: never emit a dead link).
+  const STATIC_PAGES = `${FRONTEND_ROOT}../backend/static_pages`;
+
+  /** Report pages on disk, as `marketdata-MM-YYYY` slugs plus `YYYY-MM` keys. */
+  function reportsOnDisk(): { slugs: string[]; keys: string[] } {
+    const slugs = readdirSync(STATIC_PAGES, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^marketdata-\d{2}-\d{4}\.html$/.test(entry.name))
+      .map((entry) => entry.name.replace(/\.html$/, ''))
+      .sort();
+    const keys = slugs.map((slug) => editionKeyOf(slug)).sort();
+    return { slugs, keys };
+  }
+
+  /** `marketdata-08-2026` -> `2026-08` (the inverse of reportPath). */
+  function editionKeyOf(slug: string): string {
+    const [, month, year] = slug.split('-');
+    return `${year}-${month}`;
+  }
+
+  it('lists every report page that ships with this repo, and nothing else', () => {
+    const { slugs, keys } = reportsOnDisk();
+    expect(slugs.length).toBeGreaterThan(0);
+    expect([...KNOWN_REPORT_SLUGS].sort()).toEqual(slugs);
+    expect([...KNOWN_EDITION_KEYS].sort()).toEqual(keys);
+    // The reverse direction too: nothing in the manifest is missing on disk.
+    for (const slug of KNOWN_REPORT_SLUGS) {
+      expect(readdirSync(STATIC_PAGES)).toContain(`${slug}.html`);
+    }
+  });
+
+  it('is generated output, not a hand-maintained list', () => {
+    const source = readFileSync(
+      `${FRONTEND_ROOT}src/pages/marketdata/marketDataReports.ts`,
+      'utf8'
+    );
+    expect(source).toContain('GENERATED FILE — DO NOT EDIT');
+  });
+
+  it('agrees with the edition model in both directions', () => {
+    const { keys } = reportsOnDisk();
+    // A shipped report page must be reachable: its edition cannot be 'coming'.
+    for (const key of keys) {
+      expect(EDITIONS[key]).toBeDefined();
+      expect(EDITIONS[key].status).not.toBe('coming');
+    }
+    // A navigable edition must have a report page to point at.
+    for (const [key, edition] of Object.entries(EDITIONS)) {
+      if (edition.status !== 'coming') {
+        expect(KNOWN_EDITION_KEYS.has(key)).toBe(true);
+      }
+    }
+  });
+
+  it('links only months the FastAPI app actually routes', () => {
+    // A file on disk is not enough on its own: main.py registers one explicit
+    // route per report page, so a missing route is the same dead link.
+    const mainPy = readFileSync(`${FRONTEND_ROOT}../backend/main.py`, 'utf8');
+    const routed = new Set(
+      [...mainPy.matchAll(/@app\.get\("(\/marketdata-\d{2}-\d{4})"\)/g)].map((match) => match[1])
+    );
+    for (const slug of KNOWN_REPORT_SLUGS) {
+      expect(routed.has(`/${slug}`)).toBe(true);
+      expect(mainPy).toContain(`_STATIC_PAGES / "${slug}.html"`);
+    }
+    for (const route of routed) {
+      expect(KNOWN_REPORT_SLUGS.has(route.slice(1))).toBe(true);
+    }
+  });
+
+  it('backs every /marketdata- link the edition model can emit', () => {
+    for (const key of Object.keys(EDITIONS)) {
+      const href = reportHref(key);
+      if (href === null) continue;
+      expect(KNOWN_REPORT_SLUGS.has(href.slice(1))).toBe(true);
+      expect(reportsOnDisk().slugs).toContain(href.slice(1));
     }
   });
 });

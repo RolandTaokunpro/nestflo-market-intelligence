@@ -6,15 +6,16 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import App from '../../src/App';
 import MarketData from '../../src/pages/MarketData';
 import { MD_SEO, applyMarketDataSeo } from '../../src/pages/marketdata/marketDataSeo';
 import { MD_TOKENS } from '../../src/pages/marketdata/marketData';
 
-const FRONTEND_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+// Vitest runs with cwd = frontend/ (see package.json scripts).
+const FRONTEND_ROOT = `${process.cwd()}/`;
 
 function renderAppAt(path: string) {
   window.history.pushState({}, '', path);
@@ -81,7 +82,11 @@ describe('AC-1 route renders the landing page', () => {
 });
 
 function renderAt() {
-  return render(<MarketData />);
+  return render(
+    <MemoryRouter initialEntries={['/marketdata']}>
+      <MarketData />
+    </MemoryRouter>
+  );
 }
 
 describe('AC-17 canonical brand application', () => {

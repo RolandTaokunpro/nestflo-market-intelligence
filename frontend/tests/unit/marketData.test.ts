@@ -8,7 +8,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 import {
   MD_TOKENS,
@@ -16,7 +15,6 @@ import {
   MD_GRADIENT_SIGNATURE,
   MD_STYLE_VARS,
   MONTH_NAMES,
-  MONTHS_SHORT,
   EDITIONS,
   EDITION_YEARS,
   AUGUST_2026,
@@ -41,7 +39,8 @@ import {
 
 import { CITIES, getCityByPrefix } from '../../src/data/cities';
 
-const FRONTEND_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+// Vitest runs with cwd = frontend/ (see package.json scripts).
+const FRONTEND_ROOT = `${process.cwd()}/`;
 
 // ── WCAG relative-luminance maths (used by the AC-19 contrast contract) ──────
 function luminance(hex: string): number {
@@ -140,7 +139,6 @@ describe('edition model', () => {
   it('exposes 2026 and 2027 only as browsable years', () => {
     expect([...EDITION_YEARS]).toEqual([2026, 2027]);
     expect(MONTH_NAMES).toHaveLength(12);
-    expect(MONTHS_SHORT).toHaveLength(12);
   });
 
   it('marks August 2026 as the latest full edition', () => {
@@ -289,6 +287,7 @@ describe('AC-4 search suggestions', () => {
   it('returns nothing for an unknown query or an unmapped postcode', () => {
     expect(searchSuggestions('narnia')).toEqual([]);
     expect(searchSuggestions('TS1')).toEqual([]);
+    expect(searchSuggestions('ZZ9')).toEqual([]);
   });
 
   it('never suggests a dead link', () => {

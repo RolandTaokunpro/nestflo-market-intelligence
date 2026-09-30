@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 import {
   MD_TOKENS,
@@ -21,16 +21,18 @@ import {
   CURATED_REGIONS,
   KNOWN_CITY_SLUGS,
   editionsForYear,
-  editionStatus,
   latestEditionKey,
   monthKey,
 } from '../../src/pages/marketdata/marketData';
+
+import { KNOWN_DISTRICTS } from '../../src/pages/marketdata/marketDataDistricts';
 
 import {
   reportPath,
   cityPath,
   districtPath,
   hasCityPage,
+  hasDistrictPage,
   cityCardHref,
   slugifyCity,
   slugForCity,
@@ -41,6 +43,35 @@ import { CITIES, getCityByPrefix } from '../../src/data/cities';
 
 // Vitest runs with cwd = frontend/ (see package.json scripts).
 const FRONTEND_ROOT = `${process.cwd()}/`;
+
+// The archive directories FastAPI mounts at /rents/ — the only proof that a
+// district page exists (AC-14: never emit a dead link).
+const RENTS_ROOT = `${FRONTEND_ROOT}../backend/static_marketdata/rents`;
+
+/** District directories on disk, keyed by city slug. Empty city dirs dropped. */
+function districtsOnDisk(): Map<string, string[]> {
+  const byCity = new Map<string, string[]>();
+  for (const city of readdirSync(RENTS_ROOT, { withFileTypes: true })) {
+    if (!city.isDirectory()) continue;
+    const districts = readdirSync(`${RENTS_ROOT}/${city.name}`, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    if (districts.length > 0) byCity.set(city.name, districts);
+  }
+  return byCity;
+}
+
+function hasDistrictDir(citySlug: string, district: string): boolean {
+  try {
+    return readdirSync(`${RENTS_ROOT}/${citySlug}`, { withFileTypes: true }).some(
+      (entry) => entry.isDirectory() && entry.name === district.toLowerCase()
+    );
+  } catch {
+    return false;
+  }
+}
+
 
 // ── WCAG relative-luminance maths (used by the AC-19 contrast contract) ──────
 function luminance(hex: string): number {
@@ -153,14 +184,21 @@ describe('edition model', () => {
   });
 
   it('marks September to December 2026 as coming soon', () => {
+    const months = editionsForYear(2026);
     for (const key of ['2026-09', '2026-10', '2026-11', '2026-12']) {
-      expect(editionStatus(key)).toBe('coming');
+      const edition = months.find((candidate) => candidate.key === key)!;
+      expect(edition.status).toBe('coming');
     }
+    // September is the month the crawl is filling in — its own note, not the
+    // generic coming-soon copy.
+    expect(months.find((candidate) => candidate.key === '2026-09')!.note).toBe('Crawl in progress');
   });
 
   it('treats missing editions as coming soon', () => {
-    expect(editionStatus('2026-01')).toBe('coming');
-    expect(editionStatus('2027-06')).toBe('coming');
+    const months2027 = editionsForYear(2027);
+    expect(months2027).toHaveLength(12);
+    expect(months2027.every((edition) => edition.status === 'coming')).toBe(true);
+    expect(months2027.every((edition) => edition.note === 'Coming soon')).toBe(true);
     expect(Object.keys(EDITIONS)).not.toContain('2027-06');
   });
 
@@ -290,18 +328,88 @@ describe('AC-4 search suggestions', () => {
     expect(searchSuggestions('ZZ9')).toEqual([]);
   });
 
-  it('never suggests a dead link', () => {
-    for (const q of ['a', 'b', 'l', 'manchester', 'BS1', 'cards']) {
+  it('never suggests a dead link — district directories included (AC-14)', () => {
+    const queries = ['a', 'b', 'l', 'manchester', 'BS1', 'BS12', 'BN5', 'B2', 'cards'];
+    for (const q of queries) {
       for (const s of searchSuggestions(q, 20)) {
         expect(s.href.startsWith('/rents/')).toBe(true);
-        expect(hasCityPage(s.href.split('/')[2])).toBe(true);
+        const [, , citySlug, district] = s.href.split('/');
+        expect(hasCityPage(citySlug)).toBe(true);
+        if (s.kind === 'District') {
+          expect(district).toBeTruthy();
+          expect(hasDistrictPage(citySlug, district)).toBe(true);
+          expect(hasDistrictDir(citySlug, district)).toBe(true);
+        }
       }
     }
+  });
+
+  it('falls back to the live city page for a postcode with no district archive', () => {
+    // BS12/BS49 (Bristol) and BN5 (Brighton) are real CITIES postcodes with no
+    // /rents/<city>/<pc>/ page — half the dataset is in this position.
+    expect(hasDistrictPage('bristol', 'bs12')).toBe(false);
+    expect(hasDistrictDir('bristol', 'bs12')).toBe(false);
+
+    const [bs12] = searchSuggestions('BS12');
+    expect(bs12.label).toBe('BS12');
+    expect(bs12.kind).toBe('City');
+    expect(bs12.href).toBe('/rents/bristol/');
+    expect(bs12.sub).toContain('Bristol');
+
+    const [bn5] = searchSuggestions('BN5');
+    expect(bn5.kind).toBe('City');
+    expect(bn5.href).toBe('/rents/brighton/');
+  });
+
+  it('validates the district page, not just the city page', () => {
+    expect(hasDistrictPage('bristol', 'bs1')).toBe(true);
+    expect(hasDistrictPage('bristol', 'BS1')).toBe(true);
+    expect(hasDistrictPage('bristol', 'bs12')).toBe(false);
+    expect(hasDistrictPage('bristol', 'zz99')).toBe(false);
+    expect(hasDistrictPage('teesside', 'ts1')).toBe(false);
+    expect(hasDistrictPage(null, 'bs1')).toBe(false);
+    expect(hasDistrictPage('bristol', null)).toBe(false);
+    expect(hasDistrictPage('bristol', undefined)).toBe(false);
   });
 
   it('covers a decent slice of the real CITIES dataset', () => {
     expect(CITIES.length).toBeGreaterThan(100);
     expect(searchSuggestions('manchester')[0].href).toBe('/rents/manchester/');
+  });
+});
+
+describe('AC-14 district manifest — the shipped archive is the only truth', () => {
+  it('lists every district directory served under /rents/', () => {
+    const onDisk = districtsOnDisk();
+    expect(onDisk.size).toBeGreaterThan(100);
+
+    const manifestCities = Object.keys(KNOWN_DISTRICTS).sort();
+    expect(manifestCities).toEqual([...onDisk.keys()].sort());
+
+    for (const [city, districts] of onDisk) {
+      expect(KNOWN_DISTRICTS[city]).toEqual(districts);
+    }
+  });
+
+  it('agrees with hasDistrictPage for every entry, and rejects the rest', () => {
+    let known = 0;
+    for (const [city, districts] of districtsOnDisk()) {
+      for (const district of districts) {
+        expect(hasDistrictPage(city, district)).toBe(true);
+        known += 1;
+      }
+    }
+    expect(known).toBeGreaterThan(1000);
+    // A real postcode absent from the archive must not validate.
+    expect(hasDistrictPage('bristol', 'bs12')).toBe(false);
+  });
+
+  it('is generated output, not a hand-maintained list', () => {
+    const source = readFileSync(
+      `${FRONTEND_ROOT}src/pages/marketdata/marketDataDistricts.ts`,
+      'utf8'
+    );
+    expect(source).toContain('GENERATED FILE — DO NOT EDIT');
   });
 });
 

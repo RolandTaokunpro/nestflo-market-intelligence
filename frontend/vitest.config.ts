@@ -15,7 +15,11 @@ export default defineConfig({
         functions: 95,
         statements: 95,
       },
-      include: ['src/pages/GoldmineFinder.tsx'],
+      include: [
+        'src/pages/GoldmineFinder.tsx',
+        'src/pages/MarketData.tsx',
+        'src/pages/marketdata/**/*.{ts,tsx}',
+      ],
     },
   },
 });

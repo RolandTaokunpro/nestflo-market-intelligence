@@ -17,6 +17,8 @@ export default defineConfig({
       },
       include: [
         'src/pages/GoldmineFinder.tsx',
+        'src/components/Header.tsx',
+        'src/hooks/useMediaQuery.ts',
         'src/pages/MarketData.tsx',
         'src/pages/marketdata/**/*.{ts,tsx}',
       ],

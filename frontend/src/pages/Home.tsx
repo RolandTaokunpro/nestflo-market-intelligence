@@ -72,7 +72,7 @@ export default function Home() {
                   Benchmark a Listing
                 </Link>
                 <a
-                  href="https://calendar.app.google/KSQx4rG9L6ytS4je7"
+                  href="https://calendly.com/roland-tao-kunpro/30min"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block bg-white text-navy text-sm font-semibold px-8 py-4 rounded-xl hover:bg-brand-grey/90 transition-colors text-center border border-white/20"
@@ -232,6 +232,48 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── 3b. Market Data banner ── */}
+      <section className="relative overflow-hidden bg-navy-light border-y border-white/8">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-brand-purple/25 to-brand-cyan/15 rounded-full blur-3xl -translate-y-1/3 translate-x-1/3 pointer-events-none" />
+        <div className="max-w-6xl mx-auto px-4 py-12 sm:py-16 relative">
+          <div className="grid lg:grid-cols-2 gap-10 items-center">
+            <div>
+              <span className="inline-block bg-brand-cyan/10 text-brand-cyan text-xs font-semibold px-3 py-1.5 rounded-full mb-5 tracking-wide">
+                Market Data
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4 tracking-tight leading-tight">
+                Know what every room is worth, in any district, any month
+              </h2>
+              <p className="text-sm sm:text-base text-brand-lavender max-w-lg mb-6 leading-relaxed">
+                National monthly snapshots and a per-district rent archive &mdash; median
+                rents by room type, highest and lowest districts, and the agent vs private
+                split. 1,730 postcode districts, 117 towns and cities, London in 8 areas.
+              </p>
+              <Link
+                to="/marketdata"
+                className="inline-block bg-gradient-brand text-white text-sm font-semibold px-8 py-4 rounded-xl hover:opacity-90 transition-opacity text-center shadow-lg shadow-orange/25"
+              >
+                Explore Market Data &rarr;
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { v: '£652', l: 'National median (double)' },
+                { v: '1,730', l: 'Postcode districts' },
+                { v: '117', l: 'Towns & cities' },
+                { v: '41,884', l: 'Live listings (Aug 2026)' },
+              ].map((s) => (
+                <div key={s.l} className="bg-navy-card rounded-xl border border-white/8 p-5 text-center">
+                  <div className="text-xl sm:text-2xl font-bold text-white">{s.v}</div>
+                  <div className="text-xs text-brand-grey mt-1">{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Pricing ── */}
       <section className="bg-navy-light border-y border-white/8">
         <div className="max-w-5xl mx-auto px-4 py-16 sm:py-20">
@@ -365,7 +407,7 @@ export default function Home() {
               Benchmark a Listing
             </Link>
             <a
-              href="https://calendar.app.google/KSQx4rG9L6ytS4je7"
+              href="https://calendly.com/roland-tao-kunpro/30min"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block bg-white text-navy text-sm font-semibold px-8 py-4 rounded-xl hover:bg-brand-grey/90 transition-colors text-center border border-white/20"

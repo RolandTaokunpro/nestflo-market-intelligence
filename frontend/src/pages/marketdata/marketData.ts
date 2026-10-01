@@ -26,7 +26,7 @@ export const MD_GRADIENT_SIGNATURE =
   'linear-gradient(135deg, #2D009E 0%, #B3304A 55%, #EF4F34 100%)';
 
 /** Same booking target the shared SPA Header uses (AC-2). */
-export const DEMO_BOOKING_URL = 'https://calendar.app.google/KSQx4rG9L6ytS4je7';
+export const DEMO_BOOKING_URL = 'https://calendly.com/roland-tao-kunpro/30min';
 
 /**
  * Canonical Nestflo tokens as scoped CSS custom properties. They are applied to

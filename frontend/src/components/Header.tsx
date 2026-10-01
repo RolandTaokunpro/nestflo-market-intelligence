@@ -17,7 +17,7 @@ export default function Header() {
       </Link>
       <div className="flex items-center gap-4">
         <a
-          href="https://calendar.app.google/KSQx4rG9L6ytS4je7"
+          href="https://calendly.com/roland-tao-kunpro/30min"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm bg-gradient-brand text-white font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition-opacity shadow-md"

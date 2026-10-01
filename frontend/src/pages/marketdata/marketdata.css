@@ -89,6 +89,34 @@
   filter: brightness(1.08);
 }
 
+.md-page .md-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.md-page .md-home-link {
+  color: rgba(142, 148, 184, 0.85);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.md-page .md-home-link:hover {
+  color: #FFFFFF;
+}
+
+@media (max-width: 560px) {
+  .md-page .md-nav-actions {
+    gap: 10px;
+  }
+
+  .md-page .md-btn-demo {
+    padding: 8px 14px;
+  }
+}
+
 /* ── hero ───────────────────────────────────────────────────────────────── */
 .md-page .md-hero {
   padding: 60px 0 32px;

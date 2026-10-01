@@ -191,6 +191,89 @@ describe('Scenario: Tablet header keeps all links on one row', () => {
   });
 });
 
+/**
+ * Hawk review of feat/site-header-nav @ 55acac4, finding Q1: the tablet tier does not
+ * merely keep the row from wrapping, it *tightens* the spacing, and the desktop tier
+ * loosens it again. jsdom applies no CSS, so the tier in force at a given width is
+ * resolved from each element's own class list — modelling only the base utility and its
+ * `lg:` override, because the header uses default Tailwind breakpoints only (spec D6).
+ * That makes the assertion fail if the base tier is loosened, if the `lg:` override is
+ * dropped, or if the override is pointed back at the tight value.
+ */
+function effectiveUtility(el: Element, axis: 'gap' | 'px', width: number): string | null {
+  const pattern = new RegExp(`^(lg:)?${axis}-(\\d+)$`);
+  const matches = el.className
+    .split(/\s+/)
+    .map((token) => pattern.exec(token))
+    .filter((m): m is RegExpExecArray => m !== null);
+  const base = matches.find((m) => !m[1]);
+  const lg = matches.find((m) => m[1]);
+  const inForce = width >= LG && lg ? lg : base;
+  return inForce ? `${axis}-${inForce[2]}` : null;
+}
+
+describe('Scenario: Tablet tightens the nav spacing and desktop loosens it', () => {
+  it.each([
+    ['tablet lower bound', MD],
+    ['tablet upper bound', LG - 1],
+  ])('at %s (%ipx) the nav row and links use the tightened tier', (_n, width) => {
+    mockViewport(width);
+    renderHeader('/');
+
+    const nav = screen.getByRole('navigation');
+    const row = document.querySelector('[data-testid="header-nav-inline"]') as Element;
+
+    expect(effectiveUtility(nav, 'gap', width)).toBe('gap-2');
+    expect(effectiveUtility(row, 'gap', width)).toBe('gap-2');
+
+    for (const label of NAV_LABELS) {
+      const link = screen.getByRole('link', { name: label });
+      expect(effectiveUtility(link, 'px', width)).toBe('px-2');
+    }
+  });
+
+  it.each([
+    ['desktop lower bound', LG],
+    ['desktop', 1280],
+  ])('at %s (%ipx) the same elements use the roomier tier', (_n, width) => {
+    mockViewport(width);
+    renderHeader('/');
+
+    const nav = screen.getByRole('navigation');
+    const row = document.querySelector('[data-testid="header-nav-inline"]') as Element;
+
+    expect(effectiveUtility(nav, 'gap', width)).toBe('gap-6');
+    expect(effectiveUtility(row, 'gap', width)).toBe('gap-6');
+
+    for (const label of NAV_LABELS) {
+      const link = screen.getByRole('link', { name: label });
+      expect(effectiveUtility(link, 'px', width)).toBe('px-3');
+    }
+  });
+
+  it('makes the tablet tier strictly tighter than the desktop tier', () => {
+    mockViewport(MD);
+    const { unmount } = renderHeader('/');
+    const tablet = {
+      gap: effectiveUtility(screen.getByRole('navigation'), 'gap', MD),
+      px: effectiveUtility(screen.getByRole('link', { name: 'Market Data' }), 'px', MD),
+    };
+    unmount();
+
+    mockViewport(LG);
+    renderHeader('/');
+    const desktop = {
+      gap: effectiveUtility(screen.getByRole('navigation'), 'gap', LG),
+      px: effectiveUtility(screen.getByRole('link', { name: 'Market Data' }), 'px', LG),
+    };
+
+    expect(Number(tablet.gap?.split('-')[1])).toBeLessThan(
+      Number(desktop.gap?.split('-')[1])
+    );
+    expect(Number(tablet.px?.split('-')[1])).toBeLessThan(Number(desktop.px?.split('-')[1]));
+  });
+});
+
 describe('Scenario: Mobile collapses nav into a hamburger', () => {
   it.each([
     ['320px', 320],

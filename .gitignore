@@ -10,3 +10,6 @@ venv/
 .coverage.*
 chatbot_leads.jsonl
 backend/.coverage
+
+# vitest coverage output (frontend/coverage)
+coverage/

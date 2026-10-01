@@ -58,13 +58,13 @@ describe('AC-1 route renders the landing page', () => {
     expect(screen.getByTestId('md-sec-insight')).toBeInTheDocument();
   });
 
-  it('redirects / to /marketdata (D4: marketdata is the canonical entry)', () => {
+  it('renders the Home page at / (marketdata is a separate route, not the homepage)', () => {
     renderAppAt('/');
 
-    expect(window.location.pathname).toBe('/marketdata');
-    expect(screen.getByTestId('md-sec-hero')).toBeInTheDocument();
-    expect(screen.getByTestId('md-sec-insight')).toBeInTheDocument();
-    expect(screen.queryByText(/without proof/i)).toBeNull();
+    expect(window.location.pathname).toBe('/');
+    expect(screen.getByText(/without proof/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('md-sec-hero')).toBeNull();
+    expect(screen.queryByTestId('md-sec-insight')).toBeNull();
   });
 
   it('keeps the catch-all route rendering Home for unknown paths', () => {

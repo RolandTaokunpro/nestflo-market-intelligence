@@ -53,9 +53,9 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="/marketdata-08-2026" className="hover:text-white transition-colors">
-                  Market Data — August 2026
-                </a>
+                <Link to="/marketdata" className="hover:text-white transition-colors">
+                  Market Data
+                </Link>
               </li>
               <li>
                 <a href="/rents/" className="hover:text-white transition-colors">

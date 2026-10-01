@@ -38,6 +38,13 @@ describe('AC-2 header — coral N logo and Book a Demo', () => {
     const demo = within(screen.getByRole('banner')).getByRole('link', { name: /book a demo/i });
     expect(demo).toHaveAttribute('href', 'https://calendly.com/roland-tao-kunpro/30min');
   });
+
+  it('provides a link back to the homepage', () => {
+    renderPage();
+    const banner = screen.getByRole('banner');
+    const homeLinks = within(banner).getAllByRole('link').filter((l) => l.getAttribute('href') === '/');
+    expect(homeLinks.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('AC-3/AC-4 hero copy and search interaction', () => {

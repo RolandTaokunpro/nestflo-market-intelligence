@@ -33,10 +33,10 @@ describe('AC-2 header — coral N logo and Book a Demo', () => {
     expect(banner).toHaveTextContent('Nestflo');
   });
 
-  it('links Book a Demo to the same calendar target the existing Header uses', () => {
+  it('links Book a Demo to the Calendly booking URL', () => {
     renderPage();
     const demo = within(screen.getByRole('banner')).getByRole('link', { name: /book a demo/i });
-    expect(demo).toHaveAttribute('href', 'https://calendar.app.google/KSQx4rG9L6ytS4je7');
+    expect(demo).toHaveAttribute('href', 'https://calendly.com/roland-tao-kunpro/30min');
   });
 });
 
